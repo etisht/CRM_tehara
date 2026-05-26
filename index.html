@@ -1542,40 +1542,96 @@ async function loadReports() {
   `;
 
   // Draw charts
-  if (opEntries.length) drawBarChart('chart-operators', opEntries.map(([,v])=>v.name), opEntries.map(([,v])=>v.total), '#6B4C8B');
-  if (campEntries.length) drawBarChart('chart-campaigns', campEntries.map(([k])=>k), campEntries.map(([,v])=>v.total), '#C9A84C');
+  if (opEntries.length) drawPieChart('chart-operators', opEntries.map(([,v])=>v.name), opEntries.map(([,v])=>v.total));
+  if (campEntries.length) drawPieChart('chart-campaigns', campEntries.map(([k])=>k), campEntries.map(([,v])=>v.total));
 }
 
-function drawBarChart(canvasId, labels, values, color) {
+const PIE_COLORS = ['#6B4C8B','#C9A84C','#4CAF80','#42A5F5','#E05555','#F0A500','#9B59B6','#00BCD4','#FF7043','#8BC34A','#EC407A','#26A69A'];
+
+function drawPieChart(canvasId, labels, values) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
-  canvas.width = canvas.parentElement.clientWidth || 400;
-  canvas.height = 200;
+  const W = canvas.parentElement.clientWidth || 400;
+  const legendRows = Math.ceil(labels.length / 2);
+  canvas.width = W;
+  canvas.height = 260 + legendRows * 26;
   const ctx = canvas.getContext('2d');
-  const max = Math.max(...values) || 1;
-  const n = labels.length;
-  const padL = 10, padR = 10, padT = 10, padB = 40;
-  const w = canvas.width - padL - padR;
-  const h = canvas.height - padT - padB;
-  const barW = Math.max(20, w/n - 8);
+  const total = values.reduce((a, b) => a + b, 0);
+  if (!total) return;
 
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  labels.forEach((lbl, i) => {
-    const x = padL + i*(w/n) + (w/n-barW)/2;
-    const barH = (values[i]/max)*h;
-    const y = padT + h - barH;
-    ctx.fillStyle = color;
+  const colors = values.map((_, i) => PIE_COLORS[i % PIE_COLORS.length]);
+  const cx = W / 2;
+  const cy = 115;
+  const r = Math.min(95, W / 3);
+
+  ctx.clearRect(0, 0, W, canvas.height);
+
+  // Draw slices
+  let startAngle = -Math.PI / 2;
+  values.forEach((val, i) => {
+    const slice = (val / total) * 2 * Math.PI;
     ctx.beginPath();
-    ctx.roundRect(x, y, barW, barH, 4);
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, startAngle, startAngle + slice);
+    ctx.closePath();
+    ctx.fillStyle = colors[i];
     ctx.fill();
-    // value
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Percentage label inside slice
+    if (slice > 0.22) {
+      const midAngle = startAngle + slice / 2;
+      const pct = Math.round(val / total * 100);
+      const lx = cx + Math.cos(midAngle) * r * 0.62;
+      const ly = cy + Math.sin(midAngle) * r * 0.62;
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 12px Heebo';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(pct + '%', lx, ly);
+    }
+    startAngle += slice;
+  });
+
+  // Center hole (donut effect)
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.42, 0, 2 * Math.PI);
+  ctx.fillStyle = 'white';
+  ctx.fill();
+
+  // Total label in center
+  ctx.fillStyle = '#4A3060';
+  ctx.font = 'bold 13px Heebo';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('סה"כ', cx, cy - 9);
+  ctx.font = 'bold 12px Heebo';
+  ctx.fillStyle = '#6B4C8B';
+  ctx.fillText(fmtCurrency(total), cx, cy + 9);
+
+  // Legend (2 columns)
+  const legTop = cy + r + 18;
+  labels.forEach((lbl, i) => {
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    const lx = col === 0 ? 14 : W / 2 + 14;
+    const ly = legTop + row * 26;
+
+    // Color dot
+    ctx.beginPath();
+    ctx.arc(lx + 7, ly + 7, 7, 0, 2 * Math.PI);
+    ctx.fillStyle = colors[i];
+    ctx.fill();
+
+    // Label text
     ctx.fillStyle = '#2C2035';
-    ctx.font = '11px Heebo';
-    ctx.textAlign = 'center';
-    ctx.fillText(fmtCurrency(values[i]), x+barW/2, y-4);
-    // label
-    ctx.fillStyle = '#6B5B7A';
-    ctx.fillText(lbl.length>8 ? lbl.slice(0,7)+'…' : lbl, x+barW/2, canvas.height-8);
+    ctx.font = '12px Heebo';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    const shortLbl = lbl.length > 11 ? lbl.slice(0, 10) + '…' : lbl;
+    ctx.fillText(shortLbl + ' · ' + fmtCurrency(values[i]), lx + 20, ly + 7);
   });
 }
 
