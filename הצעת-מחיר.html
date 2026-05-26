@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>הצעת מחיר – CRM טהרת המשפחה</title>
+<style>
+  :root {
+    --primary: #1e3a5f;
+    --primary-light: #2d5a8e;
+    --accent: #e8a020;
+    --accent-light: #f5c063;
+    --success: #27ae60;
+    --bg: #f4f6fa;
+    --card: #ffffff;
+    --text: #1a1a2e;
+    --text-muted: #6b7280;
+    --border: #e2e8f0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 15px;
+  }
+
+  /* HERO */
+  .hero {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 60%, #1a6b8a 100%);
+    color: white;
+    padding: 64px 40px 56px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Ccircle cx='30' cy='30' r='20'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  }
+  .hero-badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 20px;
+    padding: 4px 18px;
+    font-size: 13px;
+    margin-bottom: 18px;
+    letter-spacing: 0.5px;
+  }
+  .hero h1 { font-size: 2.6em; font-weight: 700; margin-bottom: 10px; position: relative; }
+  .hero .subtitle { font-size: 1.1em; opacity: 0.85; max-width: 560px; margin: 0 auto 36px; position: relative; }
+  .hero-stats {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    flex-wrap: wrap;
+    position: relative;
+  }
+  .hero-stat {
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 14px;
+    padding: 18px 28px;
+    min-width: 150px;
+  }
+  .hero-stat .val { font-size: 1.9em; font-weight: 700; color: var(--accent-light); }
+  .hero-stat .lbl { font-size: 12px; opacity: 0.8; margin-top: 2px; }
+
+  /* META BAR */
+  .meta-bar {
+    background: white;
+    border-bottom: 2px solid var(--border);
+    padding: 16px 48px;
+    display: flex;
+    gap: 40px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .meta-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); }
+  .meta-item strong { color: var(--text); }
+
+  /* LAYOUT */
+  .container { max-width: 960px; margin: 0 auto; padding: 48px 24px; }
+  .section { margin-bottom: 48px; }
+  .section-title {
+    font-size: 1.3em;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-title .icon {
+    width: 32px; height: 32px;
+    background: var(--primary);
+    color: white;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  /* CARDS */
+  .card {
+    background: var(--card);
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    padding: 24px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  }
+
+  /* MODULES GRID */
+  .modules-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+  }
+  .module-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    transition: box-shadow 0.2s;
+  }
+  .module-card:hover { box-shadow: 0 4px 12px rgba(30,58,95,0.1); }
+  .module-num {
+    width: 30px; height: 30px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    color: white;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .module-card h4 { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+  .module-card p { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+
+  /* INTEGRATIONS */
+  .integrations {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+  }
+  .integration-tag {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e40af;
+    border-radius: 20px;
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  /* PHASES */
+  .phases { display: flex; flex-direction: column; gap: 16px; }
+  .phase-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .phase-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: #f8fafc;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .phase-header-right { display: flex; align-items: center; gap: 14px; }
+  .phase-badge {
+    background: var(--primary);
+    color: white;
+    border-radius: 8px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .phase-header h3 { font-size: 15px; font-weight: 700; }
+  .phase-weeks { font-size: 12px; color: var(--text-muted); }
+  .phase-price {
+    font-size: 1.4em;
+    font-weight: 700;
+    color: var(--primary);
+    white-space: nowrap;
+  }
+  .phase-body { padding: 18px 24px; }
+  .phase-body .goal {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    background: #f0f9ff;
+    border-radius: 8px;
+    border-right: 3px solid var(--primary-light);
+  }
+  .phase-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .phase-item {
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    color: var(--text);
+  }
+
+  /* SUMMARY TABLE */
+  .summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  .summary-table th {
+    background: var(--primary);
+    color: white;
+    padding: 12px 16px;
+    text-align: right;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .summary-table th:last-child { text-align: left; }
+  .summary-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .summary-table td:last-child { text-align: left; font-weight: 600; color: var(--primary); }
+  .summary-table tr:last-child td { border-bottom: none; }
+  .summary-table tr:hover td { background: #f8fafc; }
+  .summary-total {
+    background: linear-gradient(135deg, var(--primary), var(--primary-light)) !important;
+    color: white !important;
+  }
+  .summary-total td { color: white !important; font-weight: 700 !important; font-size: 15px; border: none !important; }
+
+  /* PRICE BOX */
+  .price-box {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+    border-radius: 16px;
+    padding: 32px;
+    color: white;
+    text-align: center;
+    margin-top: 20px;
+  }
+  .price-box .main-price { font-size: 3em; font-weight: 800; color: var(--accent-light); line-height: 1; }
+  .price-box .price-label { font-size: 14px; opacity: 0.8; margin-bottom: 6px; }
+  .price-box .vat-note { font-size: 13px; opacity: 0.7; margin-top: 8px; }
+  .price-box .vat-price { font-size: 1.3em; font-weight: 600; margin-top: 12px; }
+  .price-divider { width: 40px; height: 2px; background: rgba(255,255,255,0.3); margin: 16px auto; }
+
+  /* TIMELINE */
+  .timeline {
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+  .timeline-item {
+    flex: 1;
+    min-width: 130px;
+    text-align: center;
+    position: relative;
+  }
+  .timeline-item:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 20px;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(to left, var(--primary-light), var(--border));
+    z-index: 0;
+  }
+  .timeline-dot {
+    width: 40px; height: 40px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: white;
+    font-weight: 700;
+    font-size: 14px;
+    margin: 0 auto 10px;
+    position: relative;
+    z-index: 1;
+    border: 3px solid white;
+    box-shadow: 0 2px 8px rgba(30,58,95,0.25);
+  }
+  .timeline-label { font-size: 12px; font-weight: 600; color: var(--primary); margin-bottom: 3px; }
+  .timeline-sub { font-size: 11px; color: var(--text-muted); }
+
+  /* PAYMENT */
+  .payment-steps { display: flex; flex-direction: column; gap: 12px; }
+  .payment-step {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+  }
+  .payment-step .step-pct {
+    width: 56px; height: 56px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    border-radius: 12px;
+    color: white;
+    font-size: 1.1em;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .payment-step .step-info { flex: 1; }
+  .payment-step .step-info h4 { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+  .payment-step .step-info p { font-size: 12px; color: var(--text-muted); }
+  .payment-step .step-amount { font-size: 1.2em; font-weight: 700; color: var(--primary); white-space: nowrap; }
+
+  /* MONTHLY */
+  .monthly-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .monthly-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+  }
+  .monthly-card.highlight {
+    border-color: var(--accent);
+    background: linear-gradient(135deg, #fffbf0, #fff8e1);
+  }
+  .monthly-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 12px; color: var(--primary); }
+  .monthly-price { font-size: 2em; font-weight: 800; color: var(--accent); margin-bottom: 4px; }
+  .monthly-price span { font-size: 0.5em; color: var(--text-muted); font-weight: 400; }
+  .services-list { list-style: none; }
+  .services-list li {
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .services-list li:last-child { border-bottom: none; }
+  .services-list li::before { content: '✓'; color: var(--success); font-weight: 700; }
+
+  /* INCLUDES */
+  .includes-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .include-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 13px;
+  }
+  .include-item .check { color: var(--success); font-weight: 700; font-size: 15px; flex-shrink: 0; }
+  .exclude-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 13px;
+  }
+  .exclude-item .x { color: #ef4444; font-weight: 700; font-size: 15px; flex-shrink: 0; }
+
+  /* TECH STACK */
+  .tech-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+  .tech-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 13px;
+  }
+  .tech-item .tech-label { font-size: 11px; color: var(--text-muted); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tech-item .tech-val { font-weight: 600; color: var(--primary); }
+
+  /* CTA */
+  .cta-section {
+    background: linear-gradient(135deg, var(--primary) 0%, #1a6b8a 100%);
+    border-radius: 18px;
+    padding: 40px;
+    text-align: center;
+    color: white;
+    margin-top: 48px;
+  }
+  .cta-section h2 { font-size: 1.6em; margin-bottom: 10px; }
+  .cta-section p { opacity: 0.85; margin-bottom: 28px; font-size: 14px; }
+  .cta-steps { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; margin-bottom: 32px; }
+  .cta-step {
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 10px;
+    padding: 14px 20px;
+    font-size: 13px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .cta-step .n {
+    width: 24px; height: 24px;
+    background: var(--accent);
+    color: var(--primary);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .contact-row { display: flex; justify-content: center; gap: 32px; flex-wrap: wrap; }
+  .contact-item { font-size: 14px; opacity: 0.9; display: flex; align-items: center; gap: 6px; }
+
+  /* VALIDITY */
+  .validity-bar {
+    background: #fff8e1;
+    border: 1px solid var(--accent-light);
+    border-radius: 10px;
+    padding: 12px 20px;
+    font-size: 13px;
+    color: #92400e;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 24px;
+  }
+
+  /* PRINT */
+  @media print {
+    body { background: white; font-size: 13px; }
+    .hero { padding: 40px 24px; }
+    .container { padding: 24px; }
+    .phase-card, .module-card, .payment-step { break-inside: avoid; }
+  }
+  @media (max-width: 680px) {
+    /* Hero */
+    .hero { padding: 36px 20px 32px; }
+    .hero h1 { font-size: 1.5em; }
+    .hero .subtitle { font-size: 0.95em; margin-bottom: 24px; }
+    .hero-stats { gap: 10px; display: grid; grid-template-columns: 1fr 1fr; }
+    .hero-stat { min-width: 0; padding: 12px 14px; }
+    .hero-stat .val { font-size: 1.4em; }
+    .hero-stat .lbl { font-size: 11px; }
+
+    /* Meta bar */
+    .meta-bar { padding: 12px 16px; gap: 10px; flex-direction: column; align-items: flex-start; }
+    .meta-item { font-size: 12px; }
+
+    /* Container */
+    .container { padding: 20px 14px; }
+    .section { margin-bottom: 32px; }
+    .section-title { font-size: 1.1em; }
+
+    /* Modules */
+    .modules-grid { grid-template-columns: 1fr; gap: 10px; }
+
+    /* Phase cards */
+    .phase-header { flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px 16px; }
+    .phase-price { font-size: 1.2em; }
+    .phase-body { padding: 14px 16px; }
+
+    /* Summary table */
+    .summary-table { font-size: 13px; }
+    .summary-table th, .summary-table td { padding: 10px 12px; }
+
+    /* Price box */
+    .price-box { padding: 24px 20px; }
+    .price-box .main-price { font-size: 2.4em; }
+
+    /* Timeline */
+    .timeline { flex-direction: column; gap: 0; padding: 0; }
+    .timeline-item { display: flex; flex-direction: row; align-items: center; gap: 16px; text-align: right; padding: 12px 0; min-width: 0; }
+    .timeline-item:not(:last-child)::after { display: none; }
+    .timeline-item:not(:last-child)::before {
+      content: '';
+      position: absolute;
+      right: 19px;
+      top: 52px;
+      width: 2px;
+      height: calc(100% - 12px);
+      background: var(--border);
+    }
+    .timeline-item { position: relative; }
+    .timeline-dot { margin: 0; flex-shrink: 0; }
+    .timeline-label { font-size: 13px; margin-bottom: 1px; }
+    .timeline-sub { font-size: 12px; }
+
+    /* Payment steps */
+    .payment-step { padding: 14px 16px; gap: 12px; }
+    .step-pct { width: 46px; height: 46px; font-size: 1em; border-radius: 10px; }
+    .step-amount { font-size: 1.1em; }
+
+    /* Monthly */
+    .monthly-grid { grid-template-columns: 1fr; }
+
+    /* Includes */
+    .includes-grid { grid-template-columns: 1fr; }
+
+    /* Tech */
+    .tech-grid { grid-template-columns: 1fr 1fr; }
+
+    /* CTA */
+    .cta-section { padding: 28px 20px; border-radius: 14px; }
+    .cta-section h2 { font-size: 1.3em; }
+    .contact-row { flex-direction: column; gap: 12px; align-items: center; }
+
+    /* Integrations */
+    .integrations { gap: 8px; }
+    .integration-tag { font-size: 12px; padding: 5px 12px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-badge">הצעת מחיר רשמית · מאי 2026</div>
+  <h1>מערכת CRM לטהרת המשפחה</h1>
+  <p class="subtitle">פיתוח מערכת ניהול מקצועית ומקיפה – מלידים ואירועים ועד כספים, מלאי ומוקד טלפוני</p>
+  <div class="hero-stats">
+    <div class="hero-stat">
+      <div class="val">₪65,000</div>
+      <div class="lbl">מחיר הפרויקט (ללא מע"מ)</div>
+    </div>
+    <div class="hero-stat">
+      <div class="val">~3 חודשים</div>
+      <div class="lbl">משך פיתוח</div>
+    </div>
+    <div class="hero-stat">
+      <div class="val">13 מודולים</div>
+      <div class="lbl">פונקציונליות מלאה</div>
+    </div>
+    <div class="hero-stat">
+      <div class="val">6 שלבים</div>
+      <div class="lbl">מסירות שוטפות</div>
+    </div>
+  </div>
+</div>
+
+<!-- META BAR -->
+<div class="meta-bar">
+  <div class="meta-item">📋 <span>מוגש לכבוד: <strong>עמותת טהרת המשפחה</strong></span></div>
+  <div class="meta-item">📅 <span>תאריך: <strong>מאי 2026</strong></span></div>
+  <div class="meta-item">⏳ <span>תוקף ההצעה: <strong>30 יום</strong></span></div>
+  <div class="meta-item">📄 <span>גרסה: <strong>1.0</strong></span></div>
+</div>
+
+<div class="container">
+
+  <!-- MODULES -->
+  <div class="section">
+    <div class="section-title">
+      <div class="icon">🧩</div>
+      היקף העבודה – מודולים כלולים
+    </div>
+    <div class="modules-grid">
+      <div class="module-card"><div class="module-num">1</div><div><h4>ניהול משתמשים והרשאות</h4><p>6 תפקידים, RBAC מלא, Audit Log</p></div></div>
+      <div class="module-card"><div class="module-num">2</div><div><h4>ניהול לידים ואנשי קשר</h4><p>כרטיס ליד, היסטוריה, סטטוסים, follow-up</p></div></div>
+      <div class="module-card"><div class="module-num">3</div><div><h4>מוקד טלפוני</h4><p>חלוקת לידים Round Robin, ממשק טלפנית</p></div></div>
+      <div class="module-card"><div class="module-num">4</div><div><h4>ניהול אירועים</h4><p>יצירה, עריכה, קיבולת, דשבורד אירוע</p></div></div>
+      <div class="module-card"><div class="module-num">5</div><div><h4>בונה דפי נחיתה</h4><p>עורך ויזואלי, URL ייחודי, שדות גמישים</p></div></div>
+      <div class="module-card"><div class="module-num">6</div><div><h4>ניהול אישורי הגעה</h4><p>מעקב שיחות, סטטוסי אישור, התראות</p></div></div>
+      <div class="module-card"><div class="module-num">7</div><div><h4>ממשק סריקה (PWA)</h4><p>סריקת QR, חיפוש ידני, סימון הגעה</p></div></div>
+      <div class="module-card"><div class="module-num">8</div><div><h4>ניהול תרומות</h4><p>הרשאות מפוצלות, אמצעי תשלום, דוחות</p></div></div>
+      <div class="module-card"><div class="module-num">9</div><div><h4>הוצאות ומלאי</h4><p>הזנת הוצאה + קבלה, מעקב מלאי</p></div></div>
+      <div class="module-card"><div class="module-num">10</div><div><h4>HR מוקד – נוכחות</h4><p>שעון כניסה/יציאה, בקשות חופש, דוח חודשי</p></div></div>
+      <div class="module-card"><div class="module-num">11</div><div><h4>אישור חומרי פרסום</h4><p>ממשק חברת פרסום, אישור Admin</p></div></div>
+      <div class="module-card"><div class="module-num">12</div><div><h4>מעקב תקציב קמפיין</h4><p>אינטגרציה Meta Ads API, גרפים</p></div></div>
+      <div class="module-card"><div class="module-num">13</div><div><h4>דוחות ודשבורד</h4><p>KPIs בזמן אמת, ייצוא Excel/CSV</p></div></div>
+    </div>
+    <div style="margin-top:20px;">
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px;font-weight:600;">אינטגרציות חיצוניות</div>
+      <div class="integrations">
+        <span class="integration-tag">📘 Meta Leads API</span>
+        <span class="integration-tag">📊 Meta Ads API</span>
+        <span class="integration-tag">💬 WhatsApp Business</span>
+        <span class="integration-tag">📱 SMS Fallback</span>
+        <span class="integration-tag">☁️ Supabase Storage</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASES -->
+  <div class="section">
+    <div class="section-title">
+      <div class="icon">🚀</div>
+      פירוט עלויות לפי שלב
+    </div>
+    <div class="phases">
+
+      <div class="phase-card">
+        <div class="phase-header">
+          <div class="phase-header-right">
+            <div class="phase-badge">שלב 1</div>
+            <div>
+              <h3>MVP ליבה</h3>
+              <div class="phase-weeks">חודש 1</div>
+            </div>
+          </div>
+          <div class="phase-price">₪16,000</div>
+        </div>
+        <div class="phase-body">
+          <div class="goal">🎯 מטרה: מערכת ניהול לידים ומוקד טלפוני תפעולי</div>
+          <div class="phase-items">
+            <span class="phase-item">ניהול משתמשים + RBAC</span>
+            <span class="phase-item">ניהול לידים מלא</span>
+            <span class="phase-item">כרטיס ליד</span>
+            <span class="phase-item">חלוקת Round Robin</span>
+            <span class="phase-item">דשבורד בסיסי</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="phase-card">
+        <div class="phase-header">
+          <div class="phase-header-right">
+            <div class="phase-badge">שלב 2</div>
+            <div>
+              <h3>אירועים מלאים</h3>
+              <div class="phase-weeks">חודש 2</div>
+            </div>
+          </div>
+          <div class="phase-price">₪15,000</div>
+        </div>
+        <div class="phase-body">
+          <div class="goal">🎯 מטרה: תהליך אירוע מקצה לקצה ללא נייר</div>
+          <div class="phase-items">
+            <span class="phase-item">בונה דפי נחיתה</span>
+            <span class="phase-item">רישום + בדיקת כפילויות</span>
+            <span class="phase-item">יצירת QR</span>
+            <span class="phase-item">ממשק סריקה PWA</span>
+            <span class="phase-item">WhatsApp אוטומטי</span>
+            <span class="phase-item">ניהול אישורי הגעה</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="phase-card">
+        <div class="phase-header">
+          <div class="phase-header-right">
+            <div class="phase-badge">שלב 3</div>
+            <div>
+              <h3>אינטגרציות</h3>
+              <div class="phase-weeks">חודש 2</div>
+            </div>
+          </div>
+          <div class="phase-price">₪6,000</div>
+        </div>
+        <div class="phase-body">
+          <div class="goal">🎯 מטרה: ייבוא לידים אוטומטי מלא</div>
+          <div class="phase-items">
+            <span class="phase-item">Meta Leads Webhook</span>
+            <span class="phase-item">SMS Fallback</span>
+            <span class="phase-item">Error handling ומוניטורינג</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="phase-card">
+        <div class="phase-header">
+          <div class="phase-header-right">
+            <div class="phase-badge">שלב 4</div>
+            <div>
+              <h3>כספים ומלאי</h3>
+              <div class="phase-weeks">חודש 3</div>
+            </div>
+          </div>
+          <div class="phase-price">₪8,000</div>
+        </div>
+        <div class="phase-body">
+          <div class="goal">🎯 מטרה: ניהול מלא של עלויות ומלאי</div>
+          <div class="phase-items">
+            <span class="phase-item">מודול הוצאות + קבלות</span>
+            <span class="phase-item">מודול מלאי</span>
+            <span class="phase-item">דוח כספי</span>
+            <span class="phase-item">ייצוא CSV/Excel</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="phase-card">
+        <div class="phase-header">
+          <div class="phase-header-right">
+            <div class="phase-badge">שלב 5</div>
+            <div>
+              <h3>HR מוקד</h3>
+              <div class="phase-weeks">חודש 3</div>
+            </div>
+          </div>
+          <div class="phase-price">₪6,500</div>
+        </div>
+        <div class="phase-body">
+          <div class="goal">🎯 מטרה: ניהול נוכחות טלפניות</div>
+          <div class="phase-items">
+            <span class="phase-item">שעון כניסה/יציאה</span>
+            <span class="phase-item">Audit Log</span>
+            <span class="phase-item">לוח נוכחות ויזואלי</span>
+            <span class="phase-item">ניהול היעדרויות</span>
+            <span class="phase-item">דוח חודשי Excel</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="phase-card">
+        <div class="phase-header">
+          <div class="phase-header-right">
+            <div class="phase-badge">שלב 6</div>
+            <div>
+              <h3>דוחות ואופטימיזציה</h3>
+              <div class="phase-weeks">חודש 3</div>
+            </div>
+          </div>
+          <div class="phase-price">₪9,500</div>
+        </div>
+        <div class="phase-body">
+          <div class="goal">🎯 מטרה: מידע עסקי מלא ו-PWA מוגמר</div>
+          <div class="phase-items">
+            <span class="phase-item">Meta Ads API</span>
+            <span class="phase-item">אישור חומרי פרסום</span>
+            <span class="phase-item">דשבורד מנהל מלא</span>
+            <span class="phase-item">דוחות ביצועים</span>
+            <span class="phase-item">PWA מוגמר</span>
+            <span class="phase-item">Hardening סופי</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="phase-card">
+        <div class="phase-header">
+          <div class="phase-header-right">
+            <div class="phase-badge" style="background:#6b7280;">נלוות</div>
+            <div>
+              <h3>עיצוב + תשתית</h3>
+              <div class="phase-weeks">לאורך כל הפרויקט</div>
+            </div>
+          </div>
+          <div class="phase-price">₪4,000</div>
+        </div>
+        <div class="phase-body">
+          <div class="phase-items">
+            <span class="phase-item">Design System עברי RTL</span>
+            <span class="phase-item">עיצוב UI/UX</span>
+            <span class="phase-item">הגדרת Vercel + Supabase</span>
+            <span class="phase-item">CI/CD</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="section">
+    <div class="section-title">
+      <div class="icon">💰</div>
+      סיכום עלויות
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table class="summary-table">
+        <thead>
+          <tr>
+            <th>שלב</th>
+            <th>שבועות</th>
+            <th style="text-align:left;">מחיר (ללא מע"מ)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>שלב 1 – MVP ליבה</td><td>חודש 1</td><td>₪16,000</td></tr>
+          <tr><td>שלב 2 – אירועים מלאים</td><td>חודש 2</td><td>₪15,000</td></tr>
+          <tr><td>שלב 3 – אינטגרציות</td><td>חודש 2</td><td>₪6,000</td></tr>
+          <tr><td>שלב 4 – כספים ומלאי</td><td>חודש 3</td><td>₪8,000</td></tr>
+          <tr><td>שלב 5 – HR מוקד</td><td>חודש 3</td><td>₪6,500</td></tr>
+          <tr><td>שלב 6 – דוחות ואופטימיזציה</td><td>חודש 3</td><td>₪9,500</td></tr>
+          <tr><td>עיצוב + DevOps</td><td>—</td><td>₪4,000</td></tr>
+          <tr class="summary-total"><td><strong>סה"כ</strong></td><td><strong>~3 חודשים</strong></td><td><strong>₪65,000</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="price-box">
+      <div class="price-label">מחיר קבוע לפרויקט</div>
+      <div class="main-price">₪65,000</div>
+      <div class="vat-note">ללא מע"מ</div>
+      <div class="price-divider"></div>
+      <div class="vat-price">₪76,700 כולל מע"מ</div>
+      <div style="font-size:12px;opacity:0.7;margin-top:8px;">מחיר קבוע – אין חיובים נוספים בתוך הגדרת ה-Scope המוסכמת</div>
+    </div>
+  </div>
+
+  <!-- TIMELINE -->
+  <div class="section">
+    <div class="section-title">
+      <div class="icon">📅</div>
+      לוח זמנים
+    </div>
+    <div class="card">
+      <div class="timeline">
+        <div class="timeline-item">
+          <div class="timeline-dot">1</div>
+          <div class="timeline-label">חודש 1</div>
+          <div class="timeline-sub">שלב 1<br>MVP ליבה</div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot">2</div>
+          <div class="timeline-label">חודש 2</div>
+          <div class="timeline-sub">שלב 2+3<br>אירועים + אינטגרציות</div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot" style="background:linear-gradient(135deg,var(--accent),var(--accent-light));color:var(--primary);">✓</div>
+          <div class="timeline-label">חודש 3</div>
+          <div class="timeline-sub">שלב 4+5+6<br>כספים, HR, השקה מלאה</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAYMENT -->
+  <div class="section">
+    <div class="section-title">
+      <div class="icon">💳</div>
+      תנאי תשלום
+    </div>
+    <div class="payment-steps">
+      <div class="payment-step">
+        <div class="step-pct">25%</div>
+        <div class="step-amount">₪16,250</div>
+      </div>
+      <div class="payment-step">
+        <div class="step-pct">20%</div>
+        <div class="step-amount">₪13,000</div>
+      </div>
+      <div class="payment-step">
+        <div class="step-pct">20%</div>
+        <div class="step-amount">₪13,000</div>
+      </div>
+      <div class="payment-step">
+        <div class="step-pct">20%</div>
+        <div class="step-amount">₪13,000</div>
+      </div>
+      <div class="payment-step">
+        <div class="step-pct">15%</div>
+        <div class="step-amount">₪9,750</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:12px;padding:0 4px;">
+      כל תשלום ישולם תוך 14 יום ממועד אישור המסירה הרלוונטית.
+    </div>
+  </div>
+
+  <!-- MONTHLY -->
+  <div class="section">
+    <div class="section-title">
+      <div class="icon">🔄</div>
+      עלויות חודשיות לאחר השקה
+    </div>
+    <div class="monthly-grid">
+      <div class="monthly-card highlight">
+        <h3>תחזוקה חודשית</h3>
+        <div class="monthly-price">₪700 <span>/ חודש (ללא מע"מ)</span></div>
+        <ul class="services-list">
+          <li>תיקון באגים – תגובה עד 72 שעות</li>
+          <li>עדכוני אבטחה שוטפים</li>
+          <li>גיבוי אוטומטי יומי</li>
+          <li>ניטור uptime והתראות</li>
+        </ul>
+      </div>
+      <div class="monthly-card">
+        <h3>עלויות ענן ואחסון</h3>
+        <ul class="services-list">
+          <li>Vercel – Hosting ו-deploy</li>
+          <li>Supabase – Database + Storage</li>
+          <li>WhatsApp Business API</li>
+          <li>SMS Fallback (לפי שליחות)</li>
+        </ul>
+        <div style="margin-top:14px;padding:10px 12px;background:#f0f9ff;border-radius:8px;border:1px solid #bae6fd;font-size:12px;color:#1e40af;line-height:1.6;">
+          💡 <strong>אפשרויות תשלום:</strong><br>
+          תשלום ישיר של העמותה לספקים — <em>ללא עלות נוספת</em><br>
+          או תשלום דרכנו — <em>בתוספת 10% לניהול</em>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px;background:#f0f9ff;border-color:#bae6fd;">
+      <div style="display:flex;align-items:flex-start;gap:12px;font-size:13px;">
+        <span style="font-size:18px;">💡</span>
+        <div>
+          <strong>פיתוחים נוספים</strong><br>
+          <span style="color:var(--text-muted);">כל פיתוח או שינוי מעבר לסקופ המקורי יתומחר בנפרד לפי היקף הדרישה ובהסכמה מראש.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INCLUDES / EXCLUDES -->
+  <div class="section">
+    <div class="section-title">
+      <div class="icon">✅</div>
+      מה כלול / לא כלול
+    </div>
+    <div style="margin-bottom:16px;">
+      <div style="font-size:13px;font-weight:600;color:var(--success);margin-bottom:10px;">כלול בהצעה</div>
+      <div class="includes-grid">
+        <div class="include-item"><span class="check">✓</span> פיתוח Full-Stack מלא</div>
+        <div class="include-item"><span class="check">✓</span> עיצוב UI/UX עברי + RTL</div>
+        <div class="include-item"><span class="check">✓</span> PWA לנייד</div>
+        <div class="include-item"><span class="check">✓</span> כל האינטגרציות</div>
+        <div class="include-item"><span class="check">✓</span> QA לכל שלב</div>
+        <div class="include-item"><span class="check">✓</span> תיעוד טכני בסיסי</div>
+        <div class="include-item"><span class="check">✓</span> 30 יום Warranty לאחר השקה</div>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:13px;font-weight:600;color:#ef4444;margin-bottom:10px;">לא כלול בהצעה</div>
+      <div class="includes-grid">
+        <div class="exclude-item"><span class="x">✗</span> רכישת מספר WhatsApp Business</div>
+        <div class="exclude-item"><span class="x">✗</span> הגדרת תבניות Meta</div>
+        <div class="exclude-item"><span class="x">✗</span> אפליקציה נייטיב iOS/Android</div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:20px;background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border-color:#86efac;">
+      <div style="display:flex;align-items:flex-start;gap:12px;font-size:13px;">
+        <span style="font-size:20px;">🌱</span>
+        <div>
+          <strong style="font-size:14px;color:var(--primary);">הרחבת השימוש במערכת</strong><br>
+          <span style="color:var(--text-muted);line-height:1.7;">במידה והעמותה תרצה להרחיב את השימוש במערכת לכלל פעילות העמותה, בפונקציונליות הקיימת — זה יהיה <strong style="color:var(--success);">ללא עלות נוספת</strong>.<br>
+          תהליכים ודרישות חדשות מעבר למוגדר בפרויקט ידרשו אפיון נפרד ויתומחרו בהתאם.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TECH STACK -->
+  <div class="section">
+    <div class="section-title">
+      <div class="icon">⚙️</div>
+      מחסנית טכנולוגית
+    </div>
+    <div class="tech-grid">
+      <div class="tech-item"><div class="tech-label">Frontend</div><div class="tech-val">Next.js 15 + TypeScript</div></div>
+      <div class="tech-item"><div class="tech-label">Styling</div><div class="tech-val">Tailwind CSS</div></div>
+      <div class="tech-item"><div class="tech-label">Backend</div><div class="tech-val">Next.js API Routes + tRPC</div></div>
+      <div class="tech-item"><div class="tech-label">Database</div><div class="tech-val">PostgreSQL via Supabase</div></div>
+      <div class="tech-item"><div class="tech-label">Auth</div><div class="tech-val">Supabase Auth + RLS</div></div>
+      <div class="tech-item"><div class="tech-label">Storage</div><div class="tech-val">Supabase Storage</div></div>
+      <div class="tech-item"><div class="tech-label">Mobile</div><div class="tech-val">PWA (next-pwa)</div></div>
+      <div class="tech-item"><div class="tech-label">Hosting</div><div class="tech-val">Vercel + Supabase Cloud</div></div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="cta-section">
+    <h2>מוכנים להתחיל?</h2>
+    <p>אישור הצעת המחיר ומתחילים.</p>
+    <div class="contact-row">
+      <div class="contact-item">👤 אתי שטיינגרט</div>
+      <div class="contact-item">📱 050-201-2112</div>
+      <div class="contact-item">📧 etishtaingart@gmail.com</div>
+    </div>
+  </div>
+
+  <div class="validity-bar">
+    ⏳ <strong>הצעה זו תקפה ל-30 יום ממועד הגשתה.</strong>&nbsp; כל המחירים ללא מע"מ אלא אם צוין אחרת. קניין רוחני מועבר לבעלות הלקוח עם תשלום מלא.
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRM טהרת המשפחה – קונספט מערכת</title>
+<style>
+  :root {
+    --primary: #1e3a5f;
+    --primary-light: #2d5a8e;
+    --accent: #e8a020;
+    --accent-light: #f5c063;
+    --success: #27ae60;
+    --warning: #e67e22;
+    --danger: #e74c3c;
+    --purple: #8e44ad;
+    --teal: #16a085;
+    --bg: #f4f6fa;
+    --card: #ffffff;
+    --text: #1a1a2e;
+    --text-muted: #6b7280;
+    --border: #e2e8f0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 15px;
+  }
+
+  /* HERO */
+  .hero {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 60%, #1a6b8a 100%);
+    color: white;
+    padding: 60px 40px 50px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Ccircle cx='30' cy='30' r='20'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  }
+  .hero-badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 20px;
+    padding: 4px 16px;
+    font-size: 13px;
+    margin-bottom: 16px;
+    letter-spacing: 0.5px;
+  }
+  .hero h1 { font-size: 2.8em; font-weight: 700; margin-bottom: 10px; position: relative; }
+  .hero p { font-size: 1.15em; opacity: 0.85; max-width: 600px; margin: 0 auto 30px; position: relative; }
+  .hero-stats {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    flex-wrap: wrap;
+    position: relative;
+  }
+  .hero-stat { text-align: center; }
+  .hero-stat .num { font-size: 2em; font-weight: 700; color: var(--accent-light); }
+  .hero-stat .lbl { font-size: 0.85em; opacity: 0.8; }
+
+  /* LAYOUT */
+  .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+  .section { padding: 50px 0; }
+  .section-title {
+    font-size: 1.5em;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+    margin-right: 8px;
+  }
+  .section-sub { color: var(--text-muted); margin-bottom: 28px; font-size: 0.95em; }
+
+  /* MODULE GRID */
+  .modules-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 20px;
+  }
+  .module-card {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 24px;
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .module-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
+  .module-card::before {
+    content: '';
+    position: absolute;
+    top: 0; right: 0; left: 0;
+    height: 4px;
+  }
+  .module-card.blue::before { background: var(--primary); }
+  .module-card.green::before { background: var(--success); }
+  .module-card.orange::before { background: var(--warning); }
+  .module-card.purple::before { background: var(--purple); }
+  .module-card.teal::before { background: var(--teal); }
+  .module-card.red::before { background: var(--danger); }
+  .module-card.gold::before { background: var(--accent); }
+
+  .module-icon {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    margin-bottom: 14px;
+  }
+  .blue .module-icon { background: #e8f0fa; }
+  .green .module-icon { background: #e8f8f0; }
+  .orange .module-icon { background: #fef3e8; }
+  .purple .module-icon { background: #f5eefa; }
+  .teal .module-icon { background: #e8f8f5; }
+  .red .module-icon { background: #fde8e8; }
+  .gold .module-icon { background: #fef8e8; }
+
+  .module-card h3 { font-size: 1.1em; font-weight: 700; margin-bottom: 6px; }
+  .module-card p { color: var(--text-muted); font-size: 0.88em; margin-bottom: 14px; }
+  .feature-list { list-style: none; }
+  .feature-list li {
+    font-size: 0.85em;
+    padding: 4px 0;
+    color: #374151;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .feature-list li::before { content: '✓'; color: var(--success); font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+  .new-badge {
+    display: inline-block;
+    background: var(--accent);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 10px;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  /* WORKFLOW SECTION */
+  .workflow-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 768px) { .workflow-container { grid-template-columns: 1fr; } }
+  .workflow-card {
+    background: var(--card);
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+  }
+  .workflow-header {
+    padding: 16px 20px;
+    font-weight: 700;
+    font-size: 0.95em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .workflow-body { padding: 0 20px 20px; }
+  .step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .step:last-child { border-bottom: none; }
+  .step-num {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+    color: white;
+  }
+  .step-text { font-size: 0.88em; line-height: 1.5; }
+  .step-text strong { display: block; color: var(--text); margin-bottom: 2px; }
+  .step-text span { color: var(--text-muted); }
+  .step-highlight {
+    background: #fffbf0;
+    border: 1px solid var(--accent-light);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 0.82em;
+    color: #7c5b0a;
+    margin-top: 4px;
+  }
+
+  /* STATUS TRACKER */
+  .status-flow {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    overflow-x: auto;
+    padding: 20px 0;
+    flex-wrap: nowrap;
+  }
+  .status-node {
+    text-align: center;
+    min-width: 110px;
+    flex-shrink: 0;
+  }
+  .status-bubble {
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px;
+    margin: 0 auto 8px;
+    border: 3px solid transparent;
+  }
+  .status-label { font-size: 0.78em; color: var(--text); font-weight: 600; line-height: 1.3; }
+  .status-sub { font-size: 0.7em; color: var(--text-muted); }
+  .status-arrow {
+    font-size: 20px;
+    color: var(--border);
+    flex-shrink: 0;
+    padding: 0 4px;
+    margin-bottom: 28px;
+  }
+
+  /* PERMISSIONS TABLE */
+  .perms-table { width: 100%; border-collapse: collapse; font-size: 0.82em; }
+  .perms-table th {
+    background: var(--primary);
+    color: white;
+    padding: 10px 14px;
+    text-align: center;
+    font-weight: 600;
+  }
+  .perms-table th:first-child { text-align: right; }
+  .perms-table td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    text-align: center;
+  }
+  .perms-table td:first-child { text-align: right; font-weight: 500; }
+  .perms-table tr:nth-child(even) td { background: #f9fafb; }
+  .perms-table tr:hover td { background: #f0f4ff; }
+  .p-yes { color: var(--success); font-size: 16px; }
+  .p-no { color: #d1d5db; font-size: 16px; }
+  .p-view { color: var(--warning); font-size: 14px; }
+  .perms-table .section-row td {
+    background: var(--primary);
+    color: white;
+    font-weight: 700;
+    text-align: right;
+    padding: 7px 14px;
+    font-size: 0.85em;
+  }
+
+  /* KPI ROW */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 30px;
+  }
+  .kpi-card {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 20px 16px;
+    text-align: center;
+    border: 1px solid var(--border);
+    box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+  }
+  .kpi-icon { font-size: 28px; margin-bottom: 8px; }
+  .kpi-value { font-size: 1.8em; font-weight: 700; color: var(--primary); line-height: 1; }
+  .kpi-label { font-size: 0.78em; color: var(--text-muted); margin-top: 4px; }
+
+  /* TECH STACK */
+  .tech-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .tech-item {
+    background: var(--card);
+    border-radius: 10px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .tech-icon { font-size: 22px; flex-shrink: 0; }
+  .tech-name { font-size: 0.88em; font-weight: 600; }
+  .tech-role { font-size: 0.75em; color: var(--text-muted); }
+
+  /* INTEGRATION DIAGRAM */
+  .integration-box {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 30px;
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  .int-flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: wrap;
+    row-gap: 20px;
+  }
+  .int-node {
+    background: var(--bg);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 20px;
+    text-align: center;
+    min-width: 110px;
+  }
+  .int-node.highlight { border-color: var(--primary); background: #e8f0fa; }
+  .int-node .int-icon { font-size: 24px; }
+  .int-node .int-name { font-size: 0.78em; font-weight: 600; margin-top: 4px; }
+  .int-arrow { font-size: 20px; color: var(--primary-light); padding: 0 8px; }
+  .int-label { font-size: 0.7em; color: var(--text-muted); display: block; }
+
+  /* FOOTER */
+  footer {
+    background: var(--primary);
+    color: rgba(255,255,255,0.7);
+    text-align: center;
+    padding: 24px;
+    font-size: 0.85em;
+    margin-top: 20px;
+  }
+  footer strong { color: white; }
+
+  /* PHASE TIMELINE */
+  .phases { display: flex; flex-direction: column; gap: 14px; }
+  .phase {
+    background: var(--card);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    padding: 18px 20px;
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.04);
+  }
+  .phase-num {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700;
+    font-size: 1em;
+    flex-shrink: 0;
+    color: white;
+  }
+  .phase-content { flex: 1; }
+  .phase-title { font-weight: 700; margin-bottom: 4px; }
+  .phase-weeks { font-size: 0.78em; color: var(--text-muted); margin-bottom: 6px; }
+  .phase-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .phase-tag {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 10px;
+    font-size: 0.75em;
+    color: var(--text-muted);
+  }
+  .phase-tag.new-tag { background: #fff8e8; border-color: var(--accent-light); color: #7c5b0a; }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-badge">גרסה 1.3 | מאי 2026</div>
+  <h1>CRM טהרת המשפחה</h1>
+  <p>מערכת ניהול לידים, אירועים, תרומות, מלאי ומוקד טלפוני – תחת ממשק אחד</p>
+  <div class="hero-stats">
+    <div class="hero-stat"><div class="num">3,000+</div><div class="lbl">לידים בחודש</div></div>
+    <div class="hero-stat"><div class="num">6</div><div class="lbl">סוגי משתמשים</div></div>
+    <div class="hero-stat"><div class="num">16</div><div class="lbl">מודולים</div></div>
+    <div class="hero-stat"><div class="num">PWA</div><div class="lbl">מובייל מלא</div></div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- MODULES -->
+  <div class="section">
+    <div class="section-title">🧩 מודולי המערכת</div>
+    <div class="section-sub">כל מודול פועל תחת מטריצת הרשאות מדויקת לפי תפקיד</div>
+    <div class="modules-grid">
+
+      <div class="module-card blue">
+        <div class="module-icon">👥</div>
+        <h3>ניהול לידים ואנשי קשר</h3>
+        <p>ייבוא אוטומטי ממקורות דיגיטליים, חלוקה Round Robin, כרטיס ליד מלא</p>
+        <ul class="feature-list">
+          <li>ייבוא מ-Meta, Google, דף נחיתה</li>
+          <li>מניעת כפילויות לפי טלפון</li>
+          <li>8 סטטוסי ליד + מעקב follow-up</li>
+          <li>היסטוריית אירועים ותרומות</li>
+        </ul>
+      </div>
+
+      <div class="module-card green">
+        <div class="module-icon">📅</div>
+        <h3>ניהול אירועים</h3>
+        <p>יצירה, דף נחיתה, רישום, סריקה בכניסה, תרומות – מקצה לקצה</p>
+        <ul class="feature-list">
+          <li>עורך דף נחיתה ויזואלי</li>
+          <li>QR ייחודי לכל נרשמת</li>
+          <li>סריקה בכניסה מ-PWA</li>
+          <li>תיעוד תרומות (כן/לא + סכום)</li>
+        </ul>
+      </div>
+
+      <div class="module-card orange">
+        <div class="module-icon">☎️</div>
+        <h3>אישורי הגעה <span class="new-badge">חדש</span></h3>
+        <p>ניהול שיחות אישור הגעה, מעקב סטטוס, שליחת כרטיס QR רק לאחר אישור טלפוני</p>
+        <ul class="feature-list">
+          <li>5 סטטוסי אישור הגעה</li>
+          <li>כרטיס QR נשלח רק לאחר אישור</li>
+          <li>מעקב מספר ניסיונות חיוג</li>
+          <li>התראה אוטומטית כשאחוז נמוך מיעד</li>
+        </ul>
+      </div>
+
+      <div class="module-card purple">
+        <div class="module-icon">📣</div>
+        <h3>אישור חומרי פרסום <span class="new-badge">חדש</span></h3>
+        <p>חברת הפרסום מעלה חומרים לבדיקה; Admin מאשר לפני העלאה לרשתות</p>
+        <ul class="feature-list">
+          <li>ממשק העלאה לחברת הפרסום</li>
+          <li>תצוגה מקדימה + אישור/דחייה</li>
+          <li>פידבק אוטומטי לחברה</li>
+          <li>ארכיון מלא + היסטוריה</li>
+        </ul>
+      </div>
+
+      <div class="module-card gold">
+        <div class="module-icon">📊</div>
+        <h3>מעקב תקציב קמפיין <span class="new-badge">חדש</span></h3>
+        <p>הוצאות פרסום יומיות מ-Meta Ads מול יעד מוגדר, עם גרף וסטטוס</p>
+        <ul class="feature-list">
+          <li>שליפה אוטומטית מ-Meta Ads API</li>
+          <li>יעד יומי + מצטבר לפי קמפיין</li>
+          <li>גרף יעד vs. בפועל</li>
+          <li>התראה על חריגת תקציב</li>
+        </ul>
+      </div>
+
+      <div class="module-card teal">
+        <div class="module-icon">💬</div>
+        <h3>WhatsApp / SMS – כלל פעילויות <span class="new-badge">חדש</span></h3>
+        <p>שליחת הודעות לא רק לאירועים אלא לכלל הפעילויות העתידיות</p>
+        <ul class="feature-list">
+          <li>תבניות לסוגי פעילויות שונים</li>
+          <li>סינון נמענים לפי עיר / תיוג</li>
+          <li>תזמון שליחה עתידית</li>
+          <li>לוג שליחות + סטטוס מסירה</li>
+        </ul>
+      </div>
+
+      <div class="module-card blue">
+        <div class="module-icon">💰</div>
+        <h3>הוצאות ומלאי</h3>
+        <p>הזנת הוצאות עם קבלה, ניהול מלאי מתנות, דוח כספי לפי אירוע</p>
+        <ul class="feature-list">
+          <li>הזנת הוצאה + צרף קבלה (תמונה/PDF)</li>
+          <li>כניסה/יציאה מלאי פשוט ממובייל</li>
+          <li>ROI לפי אירוע (תרומות – הוצאות)</li>
+          <li>ייצוא לאקסל</li>
+        </ul>
+      </div>
+
+      <div class="module-card green">
+        <div class="module-icon">🕐</div>
+        <h3>HR מוקד – נוכחות</h3>
+        <p>כניסה/יציאה ממשמרת, ניהול חופשות, דוח נוכחות חודשי</p>
+        <ul class="feature-list">
+          <li>שעון מחכה – כניסה/יציאה</li>
+          <li>לוח נוכחות ויזואלי למנהל</li>
+          <li>ניהול חופש/מחלה/חג</li>
+          <li>דוח חודשי לאקסל</li>
+        </ul>
+      </div>
+
+      <div class="module-card red">
+        <div class="module-icon">📈</div>
+        <h3>דשבורד ודוחות</h3>
+        <p>KPIs בזמן אמת, דוחות לפי תפקיד, ייצוא CSV/Excel</p>
+        <ul class="feature-list">
+          <li>דשבורד Admin עם נתונים חיים</li>
+          <li>דוח ביצועי מוקד לפי טלפנית</li>
+          <li>דוח מקורות לידים</li>
+          <li>דוח תרומות חודשי לטלפנית</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- REGISTRATION WORKFLOW -->
+  <div class="section">
+    <div class="section-title">🔄 תהליך רישום לאירוע – מעודכן</div>
+    <div class="section-sub">כרטיס QR נשלח רק לאחר אישור הגעה טלפוני (שינוי מרכזי בגרסה 1.3)</div>
+
+    <!-- STATUS FLOW -->
+    <div style="background:white;border-radius:14px;border:1px solid var(--border);padding:24px;margin-bottom:24px;overflow-x:auto;">
+      <div style="font-weight:700;margin-bottom:16px;color:var(--primary);">סטטוסי אישור הגעה</div>
+      <div class="status-flow">
+        <div class="status-node">
+          <div class="status-bubble" style="background:#f0f4ff;border-color:#a0b4e0;">📝</div>
+          <div class="status-label">נרשמה</div>
+          <div class="status-sub">ממתינה לאישור</div>
+        </div>
+        <div class="status-arrow">→</div>
+        <div class="status-node">
+          <div class="status-bubble" style="background:#fff8e8;border-color:#f5c063;">📞</div>
+          <div class="status-label">ניסיון 1</div>
+          <div class="status-sub">ללא מענה</div>
+        </div>
+        <div class="status-arrow">→</div>
+        <div class="status-node">
+          <div class="status-bubble" style="background:#fef0e8;border-color:#e67e22;">📞</div>
+          <div class="status-label">ניסיון 2</div>
+          <div class="status-sub">ללא מענה</div>
+        </div>
+        <div class="status-arrow" style="color:#ccc;">→</div>
+        <div class="status-node">
+          <div class="status-bubble" style="background:#fde8e8;border-color:#e74c3c;">❌</div>
+          <div class="status-label">לא מגיעה</div>
+          <div class="status-sub">ביטול</div>
+        </div>
+        <div class="status-arrow" style="color:var(--success);">→ / ↗</div>
+        <div class="status-node">
+          <div class="status-bubble" style="background:#e8f8f0;border-color:#27ae60;">✅</div>
+          <div class="status-label">אישרה הגעה</div>
+          <div class="status-sub">QR נשלח</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="workflow-container">
+      <div class="workflow-card">
+        <div class="workflow-header" style="background:#e8f0fa;color:var(--primary);">
+          📋 שלב 1 – רישום (דף נחיתה)
+        </div>
+        <div class="workflow-body">
+          <div class="step">
+            <div class="step-num" style="background:var(--primary);">1</div>
+            <div class="step-text"><strong>נרשמת ממלאת פרטים</strong><span>שם + טלפון + עיר</span></div>
+          </div>
+          <div class="step">
+            <div class="step-num" style="background:var(--primary-light);">2</div>
+            <div class="step-text"><strong>בדיקת כפילות</strong><span>לפי מספר טלפון</span></div>
+          </div>
+          <div class="step">
+            <div class="step-num" style="background:var(--teal);">3</div>
+            <div class="step-text">
+              <strong>WhatsApp – אישור רישום בלבד</strong>
+              <span>"תודה! נציגה תצור קשר לאישור הגעה"</span>
+              <div class="step-highlight">⚠️ ללא כרטיס/QR בשלב זה</div>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num" style="background:var(--warning);">4</div>
+            <div class="step-text"><strong>סטטוס: "ממתינה לאישור"</strong><span>עובר לרשימת הטלפנית</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="workflow-card">
+        <div class="workflow-header" style="background:#e8f8f0;color:var(--success);">
+          ☎️ שלב 2 – אישור הגעה (טלפנית)
+        </div>
+        <div class="workflow-body">
+          <div class="step">
+            <div class="step-num" style="background:var(--success);">1</div>
+            <div class="step-text"><strong>טלפנית פותחת רשימת "ממתינות"</strong><span>מסודרת לפי עדיפות</span></div>
+          </div>
+          <div class="step">
+            <div class="step-num" style="background:var(--success);">2</div>
+            <div class="step-text"><strong>מתקשרת ומתעדת תוצאה</strong><span>ניסיון / לא מגיעה / אישרה</span></div>
+          </div>
+          <div class="step">
+            <div class="step-num" style="background:var(--success);">3</div>
+            <div class="step-text">
+              <strong>סימון "אישרה הגעה" ← QR נוצר</strong>
+              <div class="step-highlight">✅ כרטיס דיגיטלי נשלח אוטומטית ב-WhatsApp</div>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num" style="background:var(--warning);">4</div>
+            <div class="step-text"><strong>% נמוך? → התראה למנהל שיווק</strong><span>המלצה להמשיך פרסום</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEW MODULES DETAIL -->
+  <div class="section">
+    <div class="section-title">✨ מודולים חדשים – פירוט</div>
+    <div class="section-sub">תוספות גרסה 1.3</div>
+
+    <div class="workflow-container">
+      <!-- ADVERTISING APPROVAL -->
+      <div class="workflow-card">
+        <div class="workflow-header" style="background:#f5eefa;color:var(--purple);">
+          📣 אישור חומרי פרסום
+        </div>
+        <div class="workflow-body">
+          <div class="step">
+            <div class="step-num" style="background:var(--purple);">1</div>
+            <div class="step-text"><strong>חברת הפרסום מעלה חומר</strong><span>תמונה / וידאו / טקסט + פלטפורמה + הערות</span></div>
+          </div>
+          <div class="step">
+            <div class="step-num" style="background:var(--purple);">2</div>
+            <div class="step-text"><strong>Admin מקבל התראה</strong><span>"חומר חדש ממתין לאישור"</span></div>
+          </div>
+          <div class="step">
+            <div class="step-num" style="background:var(--purple);">3</div>
+            <div class="step-text"><strong>בחינה + אישור / דחייה</strong><span>כולל הערות לתיקון אם נדחה</span></div>
+          </div>
+          <div class="step">
+            <div class="step-num" style="background:var(--purple);">4</div>
+            <div class="step-text"><strong>חברה מקבלת עדכון</strong><span>"מאושר להעלאה" / "נדחה – יש לתקן..."</span></div>
+          </div>
+          <div style="background:#f5eefa;border-radius:8px;padding:10px 12px;margin-top:10px;font-size:0.83em;">
+            <strong>הרשאות:</strong> Admin אישור | מנהל שיווק צפייה | חברה העלאה בלבד
+          </div>
+        </div>
+      </div>
+
+      <!-- CAMPAIGN BUDGET -->
+      <div class="workflow-card">
+        <div class="workflow-header" style="background:#fef8e8;color:#7c5b0a;">
+          📊 מעקב תקציב קמפיין
+        </div>
+        <div class="workflow-body">
+          <div class="step">
+            <div class="step-num" style="background:var(--accent);">1</div>
+            <div class="step-text"><strong>הגדרת יעד</strong><span>יעד יומי + מצטבר + meta_campaign_id</span></div>
+          </div>
+          <div class="step">
+            <div class="step-num" style="background:var(--accent);">2</div>
+            <div class="step-text"><strong>שליפה אוטומטית מ-Meta Ads API</strong><span>פעם ביום – הוצאה בפועל</span></div>
+          </div>
+          <div class="step">
+            <div class="step-num" style="background:var(--accent);">3</div>
+            <div class="step-text"><strong>תצוגה: יעד vs. בפועל</strong><span>יומי + מצטבר + גרף ציר זמן</span></div>
+          </div>
+          <div class="step">
+            <div class="step-num" style="background:var(--danger);">4</div>
+            <div class="step-text"><strong>חריגה > 110%? → התראה</strong><span>ל-Admin + מנהל שיווק</span></div>
+          </div>
+          <div style="background:#fff8e8;border-radius:8px;padding:10px 12px;margin-top:10px;font-size:0.83em;">
+            <strong>כולל:</strong> Facebook · Instagram · (Google Ads בעתיד)
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PERMISSIONS -->
+  <div class="section">
+    <div class="section-title">🔐 מטריצת הרשאות – עיקרית</div>
+    <div class="section-sub">כולל מודולים חדשים מגרסה 1.3</div>
+    <div style="overflow-x:auto;">
+    <table class="perms-table">
+      <tr>
+        <th>פעולה</th>
+        <th>Admin</th>
+        <th>מנהל שיווק</th>
+        <th>טלפנית</th>
+        <th>עובד קבלה</th>
+        <th>מזכירה</th>
+        <th>מחסנאי</th>
+      </tr>
+      <tr class="section-row"><td colspan="7">ניהול לידים</td></tr>
+      <tr><td>צפייה בכל הלידים</td><td class="p-yes">✅</td><td class="p-yes">✅</td><td class="p-view">שלה בלבד</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td></tr>
+      <tr><td>עדכון סטטוס ליד</td><td class="p-yes">✅</td><td class="p-yes">✅</td><td class="p-view">שלה</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td></tr>
+      <tr class="section-row"><td colspan="7">ניהול אירועים</td></tr>
+      <tr><td>יצירה/עריכת אירוע</td><td class="p-yes">✅</td><td class="p-yes">✅</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td></tr>
+      <tr><td>סריקת ברקוד + הגעה</td><td class="p-yes">✅</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-yes">✅</td><td class="p-no">—</td><td class="p-no">—</td></tr>
+      <tr class="section-row"><td colspan="7">אישורי הגעה – חדש</td></tr>
+      <tr><td>ניהול סטטוס אישור הגעה</td><td class="p-yes">✅</td><td class="p-no">—</td><td class="p-view">אירועים שלה</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td></tr>
+      <tr><td>שליחת כרטיס QR ידנית</td><td class="p-yes">✅</td><td class="p-no">—</td><td class="p-yes">✅</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td></tr>
+      <tr><td>הגדרת יעד אישורים לאירוע</td><td class="p-yes">✅</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td></tr>
+      <tr><td>צפייה ב-% אישורים</td><td class="p-yes">✅</td><td class="p-yes">✅</td><td class="p-view">שלה בלבד</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td></tr>
+      <tr class="section-row"><td colspan="7">חומרי פרסום – חדש</td></tr>
+      <tr><td>העלאת חומרי פרסום</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td></tr>
+      <tr><td style="padding-right:10px;font-size:0.8em;color:var(--text-muted);">↳ חברת פרסום (גישה חיצונית)</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-yes" style="color:var(--teal);font-size:12px;">רק חברה</td></tr>
+      <tr><td>אישור/דחיית חומרים</td><td class="p-yes">✅</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td></tr>
+      <tr><td>צפייה בחומרים</td><td class="p-yes">✅</td><td class="p-yes">✅</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td></tr>
+      <tr class="section-row"><td colspan="7">תקציב קמפיין – חדש</td></tr>
+      <tr><td>הגדרת יעד תקציב</td><td class="p-yes">✅</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td></tr>
+      <tr><td>צפייה בהוצאות קמפיין</td><td class="p-yes">✅</td><td class="p-yes">✅</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td></tr>
+      <tr class="section-row"><td colspan="7">WhatsApp / SMS</td></tr>
+      <tr><td>שליחה לרשימת אירוע</td><td class="p-yes">✅</td><td class="p-yes">✅</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td></tr>
+      <tr><td>שליחה לכלל הפעילויות</td><td class="p-yes">✅</td><td class="p-yes">✅</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td><td class="p-no">—</td></tr>
+    </table>
+    </div>
+  </div>
+
+  <!-- INTEGRATIONS -->
+  <div class="section">
+    <div class="section-title">🔗 אינטגרציות</div>
+    <div class="integration-box">
+      <div class="int-flow">
+        <div class="int-node"><div class="int-icon">📘</div><div class="int-name">Meta Leads API</div><span class="int-label">לידים אוטומטיים</span></div>
+        <div class="int-arrow">→</div>
+        <div class="int-node highlight"><div class="int-icon">🏛️</div><div class="int-name">CRM Core</div><span class="int-label">מערכת מרכזית</span></div>
+        <div class="int-arrow">→</div>
+        <div class="int-node"><div class="int-icon">💬</div><div class="int-name">WhatsApp API</div><span class="int-label">הודעות + כרטיסים</span></div>
+      </div>
+      <div style="height:16px;"></div>
+      <div class="int-flow">
+        <div class="int-node"><div class="int-icon">💰</div><div class="int-name">Meta Ads API</div><span class="int-label">הוצאות קמפיין</span></div>
+        <div class="int-arrow">→</div>
+        <div class="int-node highlight"><div class="int-icon">📊</div><div class="int-name">Budget Module</div><span class="int-label">יעד vs. בפועל</span></div>
+        <div class="int-arrow">→</div>
+        <div class="int-node"><div class="int-icon">🔔</div><div class="int-name">התראות</div><span class="int-label">Admin + שיווק</span></div>
+      </div>
+      <div style="height:16px;"></div>
+      <div class="int-flow">
+        <div class="int-node"><div class="int-icon">🌐</div><div class="int-name">דף נחיתה</div><span class="int-label">רישום עצמאי</span></div>
+        <div class="int-arrow">→</div>
+        <div class="int-node highlight"><div class="int-icon">☎️</div><div class="int-name">אישור הגעה</div><span class="int-label">תהליך J חדש</span></div>
+        <div class="int-arrow">→</div>
+        <div class="int-node"><div class="int-icon">📱</div><div class="int-name">QR + WhatsApp</div><span class="int-label">רק לאחר אישור</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TECH STACK -->
+  <div class="section">
+    <div class="section-title">⚙️ מחסנית טכנולוגית</div>
+    <div class="tech-grid">
+      <div class="tech-item"><div class="tech-icon">⚛️</div><div><div class="tech-name">Next.js 15</div><div class="tech-role">Frontend + API Routes</div></div></div>
+      <div class="tech-item"><div class="tech-icon">🔷</div><div><div class="tech-name">tRPC</div><div class="tech-role">Type-safe API</div></div></div>
+      <div class="tech-item"><div class="tech-icon">🐘</div><div><div class="tech-name">PostgreSQL</div><div class="tech-role">Database (Supabase)</div></div></div>
+      <div class="tech-item"><div class="tech-icon">🔐</div><div><div class="tech-name">Supabase Auth + RLS</div><div class="tech-role">Auth + Permissions</div></div></div>
+      <div class="tech-item"><div class="tech-icon">📦</div><div><div class="tech-name">Supabase Storage</div><div class="tech-role">קבלות, תמונות, QR</div></div></div>
+      <div class="tech-item"><div class="tech-icon">💬</div><div><div class="tech-name">Wati / 360dialog</div><div class="tech-role">WhatsApp Business API</div></div></div>
+      <div class="tech-item"><div class="tech-icon">📱</div><div><div class="tech-name">PWA (next-pwa)</div><div class="tech-role">מובייל – סריקה, מלאי</div></div></div>
+      <div class="tech-item"><div class="tech-icon">🏭</div><div><div class="tech-name">Vercel</div><div class="tech-role">Hosting + CI/CD</div></div></div>
+    </div>
+  </div>
+
+  <!-- PHASES -->
+  <div class="section">
+    <div class="section-title">🗺️ שלבי פיתוח</div>
+    <div class="phases">
+      <div class="phase">
+        <div class="phase-num" style="background:var(--primary);">1</div>
+        <div class="phase-content">
+          <div class="phase-title">MVP ליבה – ניהול לידים ומוקד</div>
+          <div class="phase-weeks">6–8 שבועות</div>
+          <div class="phase-tags">
+            <span class="phase-tag">משתמשים + הרשאות</span>
+            <span class="phase-tag">ייבוא לידים (Meta + ידני)</span>
+            <span class="phase-tag">כרטיס ליד</span>
+            <span class="phase-tag">Round Robin</span>
+            <span class="phase-tag">דשבורד בסיסי</span>
+          </div>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-num" style="background:var(--success);">2</div>
+        <div class="phase-content">
+          <div class="phase-title">אירועים מקצה לקצה</div>
+          <div class="phase-weeks">4–6 שבועות</div>
+          <div class="phase-tags">
+            <span class="phase-tag">דף נחיתה + עורך</span>
+            <span class="phase-tag">רישום + כפילויות</span>
+            <span class="phase-tag">QR + כרטיס דיגיטלי</span>
+            <span class="phase-tag">WhatsApp – אישור רישום</span>
+            <span class="phase-tag new-tag">אישורי הגעה טלפוניים ✨</span>
+          </div>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-num" style="background:var(--teal);">3</div>
+        <div class="phase-content">
+          <div class="phase-title">אינטגרציות + WhatsApp/SMS כלל פעילויות</div>
+          <div class="phase-weeks">3–4 שבועות</div>
+          <div class="phase-tags">
+            <span class="phase-tag">Meta Leads Webhook</span>
+            <span class="phase-tag">SMS Fallback</span>
+            <span class="phase-tag new-tag">שליחה לכל פעילות ✨</span>
+            <span class="phase-tag new-tag">תבניות הודעות ✨</span>
+          </div>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-num" style="background:var(--warning);">4</div>
+        <div class="phase-content">
+          <div class="phase-title">כספים, מלאי ותקציב קמפיין</div>
+          <div class="phase-weeks">3–4 שבועות</div>
+          <div class="phase-tags">
+            <span class="phase-tag">מודול הוצאות + קטגוריות</span>
+            <span class="phase-tag">מלאי מתנות</span>
+            <span class="phase-tag">דוח כספי</span>
+            <span class="phase-tag new-tag">Meta Ads API – תקציב ✨</span>
+            <span class="phase-tag new-tag">גרף יעד vs. בפועל ✨</span>
+          </div>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-num" style="background:var(--purple);">5</div>
+        <div class="phase-content">
+          <div class="phase-title">אישור חומרי פרסום + HR מוקד</div>
+          <div class="phase-weeks">3–4 שבועות</div>
+          <div class="phase-tags">
+            <span class="phase-tag new-tag">העלאת חומרים לאישור ✨</span>
+            <span class="phase-tag new-tag">ממשק אישור Admin ✨</span>
+            <span class="phase-tag">משמרות + נוכחות</span>
+            <span class="phase-tag">ניהול חופש/מחלה</span>
+          </div>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-num" style="background:var(--danger);">6</div>
+        <div class="phase-content">
+          <div class="phase-title">אופטימיזציה + דוחות מלאים</div>
+          <div class="phase-weeks">2–3 שבועות</div>
+          <div class="phase-tags">
+            <span class="phase-tag">דשבורד מנהל מלא</span>
+            <span class="phase-tag">ביצועי מוקד</span>
+            <span class="phase-tag">Audit Log ממשק</span>
+            <span class="phase-tag">PWA אופטימיזציה</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="section">
+    <div class="section-title">🎯 מדדי הצלחה (KPIs)</div>
+    <div class="kpi-row">
+      <div class="kpi-card"><div class="kpi-icon">⚡</div><div class="kpi-value">&lt;1 דק'</div><div class="kpi-label">זמן כניסת ליד למערכת</div></div>
+      <div class="kpi-card"><div class="kpi-icon">📲</div><div class="kpi-value">&lt;30 שנ'</div><div class="kpi-label">שליחת WhatsApp מרישום</div></div>
+      <div class="kpi-card"><div class="kpi-icon">🔍</div><div class="kpi-value">&lt;0.5 שנ'</div><div class="kpi-label">תגובת סריקת ברקוד</div></div>
+      <div class="kpi-card"><div class="kpi-icon">✅</div><div class="kpi-value">&gt;95%</div><div class="kpi-label">לידים אוטומטיים</div></div>
+      <div class="kpi-card"><div class="kpi-icon">🎫</div><div class="kpi-value">&lt;2%</div><div class="kpi-label">כשל סריקה באירוע</div></div>
+      <div class="kpi-card"><div class="kpi-icon">⏱️</div><div class="kpi-value">&lt;2 שנ'</div><div class="kpi-label">טעינת ממשק טלפנית</div></div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <strong>CRM טהרת המשפחה</strong> | גרסה 1.3 | מאי 2026 | טיוטה לאישור<br>
+  <span style="font-size:0.8em;opacity:0.6;">מסמך קונספט – לא לפרסום</span>
+</footer>
+
+</body>
+</html>
