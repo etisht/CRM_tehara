@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+"""
+Push donation records to Firebase for operator Michal
+"""
+
+import json
+import urllib.request
+import urllib.error
+import ssl
+import time
+
+ssl_ctx = ssl.create_default_context()  # uses system CAs – verifies Firebase cert
+
+FIREBASE_URL = "https://hanzaha-d558c-default-rtdb.europe-west1.firebasedatabase.app"
+OPERATOR_ID = "-Ot_Qf97WwP71atkHWui"
+OPERATOR_NAME = "יפית"
+
+CAMPAIGNS = {
+    "חידוש תרומות": {"id": "-Ot_O_Nq1ngsSaDGEwf7", "name": "חידוש תרומות"},
+    "חידוש ביטול":  {"id": "-Ot_OrEn-KxuSN7JjKq5", "name": "חידוש ביטול (לא של הטלפנית עצמה)"},
+}
+
+METHOD_MAP = {
+    "הוראת קבע באשראי":              "credit",
+    "העברה בנקאית":                  "transfer",
+    "תשלום חד פעמי בכרטיס אשראי":   "credit",
+    "קישור בתאל":                    "credit",   # payment link → credit
+}
+
+def parse_date(d):
+    """Convert d.m.yy or d/m/yy  →  yyyy-mm-dd"""
+    d = d.replace("/", ".")
+    parts = d.split(".")
+    day, mon, yr = int(parts[0]), int(parts[1]), int(parts[2])
+    yr = 2000 + yr if yr < 100 else yr
+    return f"{yr:04d}-{mon:02d}-{day:02d}"
+
+# ---------- RAW DATA (tab-separated) ----------
+RAW = [
+    ("1","שרונה מלייב",        "4/5/26",  "543396090",    12, 100,  "הוראת קבע באשראי",            "",                          "חידוש ביטול"),
+    ("1","רביד דהן",           "6/5/26",  "549001125",    24, 100,  "הוראת קבע באשראי",            "",                          "חידוש ביטול"),
+    ("1","חיים רפאילוב",       "7/5/26",  "0525107107",   24, 100,  "הוראת קבע באשראי",            "",                          "חידוש ביטול"),
+    ("1","ברוריה זנו",          "18/5/26", "524755288",    24, 104,  "הוראת קבע באשראי",            "",                          "חידוש ביטול"),
+]
+
+# ---------- RAW DATA (tab-separated) ----------
+RAW_OLD = [
+    ("1","יעקב רוני מהרטה",   "5.5.26",  "528844044",    24, 360,   "הוראת קבע באשראי",            "כפר יונה",                  "חידוש תרומות"),
+    ("1","נצר אסתר",           "5.5.26",  "526767063",    24, 360,   "הוראת קבע באשראי",            "כפר יונה",                  "חידוש תרומות"),
+    ("1","בטיטו אביב",         "5.5.26",  "546640984",    24, 250,   "הוראת קבע באשראי",            "כפר יונה",                  "חידוש תרומות"),
+    ("1","שילה עוקשי תהילה",   "5.5.26",  "509388845",    24, 360,   "הוראת קבע באשראי",            "כפר יונה",                  "חידוש תרומות"),
+    ("1","חיימוב אולגה",       "5.5.26",  "547200356",    24, 360,   "הוראת קבע באשראי",            "כפר יונה",                  "חידוש תרומות"),
+    ("1","עמר ננסי חיה",       "6.5.26",  "546060096",    24, 180,   "הוראת קבע באשראי",            "כפר יונה",                  "חידוש תרומות"),
+    ("1","חזן שגית שרה",       "7.5.26",  "505167674",     1, 160,   "העברה בנקאית",                "תרומה כללית",               "חידוש תרומות"),
+    ("1","דהן רחל חיה",        "7.5.26",  "542009535",    12, 180,   "הוראת קבע באשראי",            "אשלים-בית שמש",             "חידוש תרומות"),
+    ("1","הירש מוריה",         "11.5.26", "548081238",     1, 100,   "תשלום חד פעמי בכרטיס אשראי", "קציר",                      "חידוש תרומות"),
+    ("1","מנור כהן",           "12.5.26", "542940815",     1, 180,   "העברה בנקאית",                "",                          "חידוש ביטול"),
+    ("1","פבריקנט זהבה",       "13.5.26", "506944793",    24, 180,   "הוראת קבע באשראי",            "אשלים-בית שמש",             "חידוש תרומות"),
+    ("1","בן חמו סימה",        "13.5.26", "547450688",     1, 200,   "העברה בנקאית",                "",                          "חידוש ביטול"),
+    ("1","דוד אסתר",           "13.5.26", "523530935",    12, 180,   "הוראת קבע באשראי",            "",                          "חידוש תרומות"),
+    ("1","לירון מלכה",         "13.5.26", "19293631397",  12, 264.4, "הוראת קבע באשראי",            'מערכת חו"ל-ללא הגבלה',      "חידוש תרומות"),
+    ("1","תשובה אור",          "14.5.26", "526844747",    24, 100,   "הוראת קבע באשראי",            "בית שמש-אשלים",             "חידוש תרומות"),
+    ("1","שושנה וינברג",       "17.5.26", "525199978",    24, 553,   "הוראת קבע באשראי",            "בית שמש-אשלים",             "חידוש תרומות"),
+    ("1","כהן ציונה ומחלוף",   "17.5.26", "508633956",    24, 180,   "הוראת קבע באשראי",            "בית שמש-אשלים",             "חידוש תרומות"),
+    ("1","מיטל שאול",          "19.5.26", "502218114",    24, 100,   "הוראת קבע באשראי",            "בית שמש-אשלים",             "חידוש תרומות"),
+    ("1","עזרן מיכל",          "19.5.26", "506217896",    12, 100,   "הוראת קבע באשראי",            "בית שמש-אשלים",             "חידוש תרומות"),
+    ("1","לוי אירית",          "19.5.26", "548935250",    24, 180,   "הוראת קבע באשראי",            "בית שמש-אשלים",             "חידוש תרומות"),
+    ("1","פרחי אלינור",        "26.5.26", "545704072",    24, 50,    "הוראת קבע באשראי",            "בית שמש-אשלים",             "חידוש תרומות"),
+]
+
+def push_record(record):
+    url = f"{FIREBASE_URL}/donations.json"
+    data = json.dumps(record, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(url, data=data, method="POST",
+                                  headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=15, context=ssl_ctx) as resp:
+        return json.loads(resp.read())
+
+def main():
+    now_ms = int(time.time() * 1000)
+    ok, fail = 0, 0
+
+    for i, row in enumerate(RAW, 1):
+        don_num, donor_name, raw_date, phone, payments, amount, raw_method, notes, camp_key = row
+        date_str  = parse_date(raw_date)
+        month     = date_str[:7]          # yyyy-mm
+        method    = METHOD_MAP.get(raw_method, "credit")
+        camp      = CAMPAIGNS[camp_key]
+        total     = round(payments * amount, 2)
+
+        record = {
+            "donationNumber":    don_num,
+            "operatorId":        OPERATOR_ID,
+            "operatorName":      OPERATOR_NAME,
+            "donorName":         donor_name,
+            "donorPhone":        phone,
+            "donationDate":      date_str,
+            "month":             month,
+            "paymentsCount":     payments,
+            "amountPerPayment":  amount,
+            "totalAmount":       total,
+            "paymentMethod":     method,
+            "campaignId":        camp["id"],
+            "campaignName":      camp["name"],
+            "donorType":         "returning",
+            "notes":             notes,
+            "createdAt":         now_ms,
+            "updatedAt":         now_ms,
+        }
+
+        try:
+            result = push_record(record)
+            print(f"  ✅ [{i:02d}] {donor_name:<25} → {result['name']}")
+            ok += 1
+        except Exception as e:
+            print(f"  ❌ [{i:02d}] {donor_name:<25} → ERROR: {e}")
+            fail += 1
+
+    print(f"\nסיכום: {ok} הצלחות, {fail} כשלונות מתוך {len(RAW)} רשומות")
+
+if __name__ == "__main__":
+    main()

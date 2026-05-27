@@ -604,6 +604,26 @@ let allOperators = {};       // uid -> profile (cached)
 let allCampaigns = {};
 let allExpenseTypes = {};
 
+// ===== SECURITY: Password Hashing =====
+// Uses Web Crypto API (SHA-256 + app-specific salt)
+const _PWD_SALT = 'crm_thara_2024_hanzaha';
+async function hashPassword(password) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password + _PWD_SALT);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+// Detect if a stored value is already a SHA-256 hex hash
+function isHashed(str) {
+  return typeof str === 'string' && /^[0-9a-f]{64}$/.test(str);
+}
+
+// ===== SECURITY: Login Rate Limiting =====
+const _loginAttempts = { count: 0, lockUntil: 0 };
+const _MAX_LOGIN_ATTEMPTS = 5;
+const _LOGIN_LOCK_MS = 5 * 60 * 1000; // 5 minutes
+
 // ===== HELPERS =====
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function fmtCurrency(n) { return '₪' + Number(n||0).toLocaleString('he-IL', {minimumFractionDigits:0}); }
@@ -699,6 +719,14 @@ async function doLogin() {
   const pass = document.getElementById('login-password').value;
   const btn = document.getElementById('login-btn');
   hideLoginError();
+
+  // --- Rate limiting ---
+  if (Date.now() < _loginAttempts.lockUntil) {
+    const remaining = Math.ceil((_loginAttempts.lockUntil - Date.now()) / 1000);
+    showLoginError(`יותר מדי ניסיונות כניסה. נסה שוב בעוד ${remaining} שניות.`);
+    return;
+  }
+
   if (!email || !pass) { showLoginError('נא למלא אימייל וסיסמא'); return; }
   btn.disabled = true; btn.textContent = 'מתחבר...';
   try {
@@ -709,12 +737,47 @@ async function doLogin() {
     for (const [uid, u] of Object.entries(users)) {
       if ((u.email||'').toLowerCase() === email) { found = { uid, ...u }; break; }
     }
-    if (!found) { showLoginError('אימייל או סיסמא שגויים'); btn.disabled=false; btn.textContent='כניסה למערכת'; return; }
-    if (found.password !== pass) { showLoginError('אימייל או סיסמא שגויים'); btn.disabled=false; btn.textContent='כניסה למערכת'; return; }
+
+    // --- Password check with migration from plain-text → hash ---
+    let authenticated = false;
+    if (found) {
+      const storedPass = found.password || '';
+      if (isHashed(storedPass)) {
+        // Already hashed – compare hash
+        const inputHash = await hashPassword(pass);
+        authenticated = (inputHash === storedPass);
+      } else {
+        // Plain-text (legacy) – compare directly, then migrate to hash
+        authenticated = (storedPass === pass);
+        if (authenticated) {
+          const hashed = await hashPassword(pass);
+          await db.ref('users/' + found.uid + '/password').set(hashed);
+          found.password = hashed; // update local cache
+        }
+      }
+    }
+
+    if (!found || !authenticated) {
+      _loginAttempts.count++;
+      if (_loginAttempts.count >= _MAX_LOGIN_ATTEMPTS) {
+        _loginAttempts.lockUntil = Date.now() + _LOGIN_LOCK_MS;
+        _loginAttempts.count = 0;
+        showLoginError('יותר מדי ניסיונות כניסה. החשבון נעול ל-5 דקות.');
+      } else {
+        showLoginError('אימייל או סיסמא שגויים');
+      }
+      btn.disabled=false; btn.textContent='כניסה למערכת';
+      return;
+    }
     if (found.isActive === false) { showLoginError('החשבון אינו פעיל. אנא פנה למנהל.'); btn.disabled=false; btn.textContent='כניסה למערכת'; return; }
-    currentUser = found;
-    userProfile = found;
-    localStorage.setItem('crm_session', JSON.stringify(found));
+
+    _loginAttempts.count = 0; // reset on success
+
+    // --- Never store password in session ---
+    const { password: _pw, ...userWithoutPass } = found;
+    currentUser = userWithoutPass;
+    userProfile = currentUser;
+    localStorage.setItem('crm_session', JSON.stringify(currentUser));
     startApp();
   } catch(e) {
     showLoginError('שגיאה בהתחברות. נסה שוב.');
@@ -834,7 +897,8 @@ function setPage(title, actionsHTML, contentHTML) {
 
 // ===== OPERATOR DASHBOARD =====
 async function renderOperatorDashboard() {
-  const month = currentMonth();
+  const month = window._opDashMonth || currentMonth();
+  const isCurrentMonth = month === currentMonth();
   const today = todayStr();
   const [attSnap, absSnap, donSnap, horkTargetSnap] = await Promise.all([
     db.ref('attendance').orderByChild('operatorId').equalTo(currentUser.uid).once('value'),
@@ -881,14 +945,18 @@ async function renderOperatorDashboard() {
       <!-- כותרת + כפתורים -->
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
         <h2 style="margin:0;font-size:20px;font-weight:800;color:var(--primary-dark);">שלום, ${esc(userProfile.displayName)} 👋</h2>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <input type="month" class="filter-select" value="${month}" max="${currentMonth()}"
+            onchange="window._opDashMonth=this.value; renderOperatorDashboard()"
+            style="padding:6px 10px;border-radius:8px;border:2px solid var(--border);font-family:'Heebo',sans-serif;font-size:13px;color:var(--primary-dark);cursor:pointer;">
           <button class="btn btn-success btn-sm" onclick="showPage('attendance')">🕐 שעון נוכחות</button>
           <button class="btn btn-primary btn-sm" onclick="openAddDonation()">➕ הוספת תרומה</button>
           <button class="btn btn-ghost btn-sm" onclick="showPage('my-donations')">💙 התרומות שלי</button>
         </div>
       </div>
 
-      <!-- סיכום היום -->
+      <!-- סיכום היום – מוצג רק בחודש הנוכחי -->
+      ${isCurrentMonth ? `
       <div style="background:linear-gradient(135deg,var(--primary-dark),var(--primary));border-radius:var(--radius);padding:14px 18px;color:white;">
         <div style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.75);margin-bottom:10px;">📅 סיכום היום – ${fmtDateStr(today)}</div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);">
@@ -905,7 +973,7 @@ async function renderOperatorDashboard() {
             <div style="font-size:11px;color:rgba(255,255,255,0.65);">סכום שהותרם</div>
           </div>
         </div>
-      </div>
+      </div>` : ''}
 
       <!-- סיכום חודש -->
       <div style="background:white;border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;">
@@ -1876,7 +1944,8 @@ async function deleteExpense(id) {
 
 // ===== ADMIN DASHBOARD =====
 async function renderAdminDashboard() {
-  const month = currentMonth();
+  const month = window._adminDashMonth || currentMonth();
+  const isCurrentMonth = month === currentMonth();
   const today = todayStr();
 
   await loadAllOperators();
@@ -1951,7 +2020,10 @@ async function renderAdminDashboard() {
       <!-- כותרת + כפתורי פעולה -->
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
         <h2 style="margin:0;font-size:20px;font-weight:800;color:var(--primary-dark);">📊 דשבורד – ${monthLabel(month)}</h2>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <input type="month" class="filter-select" value="${month}" max="${currentMonth()}"
+            onchange="window._adminDashMonth=this.value; renderAdminDashboard()"
+            style="padding:6px 10px;border-radius:8px;border:2px solid var(--border);font-family:'Heebo',sans-serif;font-size:13px;color:var(--primary-dark);cursor:pointer;">
           <button class="btn btn-primary btn-sm" onclick="showPage('admin-donations')">💙 תרומות</button>
           <button class="btn btn-accent btn-sm" onclick="showPage('admin-reports')">📈 דוחות</button>
           <button class="btn btn-ghost btn-sm" onclick="showPage('admin-attendance')">🕐 נוכחות</button>
@@ -1959,7 +2031,8 @@ async function renderAdminDashboard() {
         </div>
       </div>
 
-      <!-- סיכום היום -->
+      <!-- סיכום היום – מוצג רק בחודש הנוכחי -->
+      ${isCurrentMonth ? `
       <div style="background:linear-gradient(135deg,var(--primary-dark),var(--primary));border-radius:var(--radius);padding:14px 18px;color:white;">
         <div style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.75);margin-bottom:10px;">📅 סיכום היום – ${fmtDateStr(today)}</div>
         <div style="display:grid;grid-template-columns:repeat(4,1fr);">
@@ -1980,7 +2053,7 @@ async function renderAdminDashboard() {
             <div style="font-size:10px;color:rgba(255,255,255,0.65);">סכום היום</div>
           </div>
         </div>
-      </div>
+      </div>` : ''}
 
       <!-- KPI החודש -->
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
@@ -2086,23 +2159,25 @@ async function saveUser() {
     if (editId) {
       // Edit existing
       const updates = { displayName: name, email, role };
-      if (pass) updates.password = pass;
+      if (pass) updates.password = await hashPassword(pass); // always hash
       await db.ref('users/'+editId).update(updates);
       Object.assign(allOperators[editId], updates);
-      // If editing self, update session
+      // If editing self, update session (without password)
       if (editId === currentUser.uid) {
-        Object.assign(currentUser, updates);
+        const { password: _pw, ...updatesNoPw } = updates;
+        Object.assign(currentUser, updatesNoPw);
         localStorage.setItem('crm_session', JSON.stringify(currentUser));
         document.getElementById('sidebar-username').textContent = name;
       }
       showToast('✅ משתמש עודכן','success');
     } else {
-      // Create new
+      // Create new – always store hashed password
+      const hashedPass = await hashPassword(pass);
       const ref = await db.ref('users').push({
-        displayName: name, email, password: pass, role,
+        displayName: name, email, password: hashedPass, role,
         isActive: true, createdAt: Date.now(), createdBy: currentUser.uid
       });
-      allOperators[ref.key] = { displayName: name, email, password: pass, role, isActive: true };
+      allOperators[ref.key] = { displayName: name, email, password: hashedPass, role, isActive: true };
       showToast('✅ משתמש נוצר בהצלחה','success');
     }
     closeModal('modal-user');
