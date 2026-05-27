@@ -24,8 +24,8 @@ import urllib.error
 from pathlib import Path
 
 # ── Firebase project config ──
-FIREBASE_API_KEY = "AIzaSyCxaaz39phlKXsjDW9YIKBnqBeVI1l0Sy0"
-FIREBASE_URL     = "https://hanzaha-d558c-default-rtdb.europe-west1.firebasedatabase.app"
+FIREBASE_API_KEY = "AIzaSyDLsND2pom04nRkK9wO5tCRp9GKWL78tYo"
+FIREBASE_URL     = "https://crm-tehara-default-rtdb.europe-west1.firebasedatabase.app"
 
 ssl_ctx = ssl.create_default_context()   # validates Firebase TLS certificate
 
