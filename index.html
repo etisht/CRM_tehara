@@ -888,45 +888,61 @@ async function renderOperatorDashboard() {
         </div>
       </div>
 
-      <!-- סטטיסטיקות היום + החודש -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <div style="background:linear-gradient(135deg,var(--primary-dark),var(--primary));border-radius:var(--radius);padding:12px 16px;color:white;">
-          <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:8px;">📅 סיכום היום – ${fmtDateStr(today)}</div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);">
-            <div style="text-align:center;padding:0 6px;border-left:1px solid rgba(255,255,255,0.15);">
-              <div style="font-size:18px;font-weight:800;line-height:1.2;">${fmtDuration(todayWorkMins)}</div>
-              <div style="font-size:10px;color:rgba(255,255,255,0.65);">שעות</div>
-            </div>
-            <div style="text-align:center;padding:0 6px;border-left:1px solid rgba(255,255,255,0.15);">
-              <div style="font-size:18px;font-weight:800;line-height:1.2;">${todayDons.length}</div>
-              <div style="font-size:10px;color:rgba(255,255,255,0.65);">תרומות</div>
-            </div>
-            <div style="text-align:center;padding:0 6px;">
-              <div style="font-size:18px;font-weight:800;line-height:1.2;color:var(--accent-light);">${fmtCurrency(todayDonTotal)}</div>
-              <div style="font-size:10px;color:rgba(255,255,255,0.65);">סכום</div>
-            </div>
+      <!-- סיכום היום -->
+      <div style="background:linear-gradient(135deg,var(--primary-dark),var(--primary));border-radius:var(--radius);padding:14px 18px;color:white;">
+        <div style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.75);margin-bottom:10px;">📅 סיכום היום – ${fmtDateStr(today)}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);">
+          <div style="text-align:center;padding:0 8px;border-left:1px solid rgba(255,255,255,0.15);">
+            <div style="font-size:22px;font-weight:800;line-height:1.2;">${fmtDuration(todayWorkMins)}</div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.65);">שעות עבודה</div>
           </div>
-        </div>
-        <div style="background:linear-gradient(135deg,#2E3B6E,#4A5FA8);border-radius:var(--radius);padding:12px 16px;color:white;">
-          <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:8px;">📊 ${monthLabel(month)} &nbsp;${openAttendanceKey ? '● במשמרת' : '○ לא במשמרת'}</div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);">
-            <div style="text-align:center;padding:0 6px;border-left:1px solid rgba(255,255,255,0.15);">
-              <div style="font-size:18px;font-weight:800;line-height:1.2;">${fmtDuration(totalMins)}</div>
-              <div style="font-size:10px;color:rgba(255,255,255,0.65);">שעות</div>
-            </div>
-            <div style="text-align:center;padding:0 6px;border-left:1px solid rgba(255,255,255,0.15);">
-              <div style="font-size:18px;font-weight:800;line-height:1.2;">${donData.length}</div>
-              <div style="font-size:10px;color:rgba(255,255,255,0.65);">תרומות</div>
-            </div>
-            <div style="text-align:center;padding:0 6px;">
-              <div style="font-size:18px;font-weight:800;line-height:1.2;color:var(--accent-light);">${fmtCurrency(donTotal)}</div>
-              <div style="font-size:10px;color:rgba(255,255,255,0.65);">סה"כ</div>
-            </div>
+          <div style="text-align:center;padding:0 8px;border-left:1px solid rgba(255,255,255,0.15);">
+            <div style="font-size:22px;font-weight:800;line-height:1.2;">${todayDons.length}</div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.65);">תרומות</div>
+          </div>
+          <div style="text-align:center;padding:0 8px;">
+            <div style="font-size:22px;font-weight:800;line-height:1.2;color:var(--accent-light);">${fmtCurrency(todayDonTotal)}</div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.65);">סכום שהותרם</div>
           </div>
         </div>
       </div>
 
-      <!-- בונוס + הוראות קבע -->
+      <!-- סיכום חודש -->
+      <div style="background:white;border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;">
+        <div style="font-size:12px;font-weight:700;color:var(--primary-dark);margin-bottom:8px;">📅 סיכום חודש ${monthLabel(month)}</div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">
+          <div style="text-align:center;padding:8px 4px;border-radius:8px;border-top:3px solid var(--primary);box-shadow:var(--shadow);">
+            <div style="font-size:20px;font-weight:800;color:var(--primary-dark);">${workDays}</div>
+            <div style="font-size:10px;color:var(--text-muted);">ימי עבודה</div>
+          </div>
+          <div style="text-align:center;padding:8px 4px;border-radius:8px;border-top:3px solid var(--primary);box-shadow:var(--shadow);">
+            <div style="font-size:18px;font-weight:800;color:var(--primary-dark);">${fmtDuration(totalMins)}</div>
+            <div style="font-size:10px;color:var(--text-muted);">שעות</div>
+          </div>
+          <div style="text-align:center;padding:8px 4px;border-radius:8px;border-top:3px solid var(--accent);box-shadow:var(--shadow);">
+            <div style="font-size:20px;font-weight:800;color:var(--primary-dark);">${vacDays}</div>
+            <div style="font-size:10px;color:var(--text-muted);">ימי חופשה</div>
+          </div>
+          <div style="text-align:center;padding:8px 4px;border-radius:8px;border-top:3px solid var(--danger);box-shadow:var(--shadow);">
+            <div style="font-size:20px;font-weight:800;color:var(--primary-dark);">${sickDays}</div>
+            <div style="font-size:10px;color:var(--text-muted);">ימי מחלה</div>
+          </div>
+          <div style="text-align:center;padding:8px 4px;border-radius:8px;border-top:3px solid #42A5F5;box-shadow:var(--shadow);">
+            <div style="font-size:20px;font-weight:800;color:var(--primary-dark);">${holDays}</div>
+            <div style="font-size:10px;color:var(--text-muted);">ימי חג</div>
+          </div>
+          <div style="text-align:center;padding:8px 4px;border-radius:8px;border-top:3px solid var(--success);box-shadow:var(--shadow);">
+            <div style="font-size:20px;font-weight:800;color:var(--success);">${donData.length}</div>
+            <div style="font-size:10px;color:var(--text-muted);">תרומות</div>
+          </div>
+          <div style="text-align:center;padding:8px 4px;border-radius:8px;border-top:3px solid var(--accent);box-shadow:var(--shadow);">
+            <div style="font-size:16px;font-weight:800;color:var(--accent);">${fmtCurrency(donTotal)}</div>
+            <div style="font-size:10px;color:var(--text-muted);">סה"כ תרומות</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- יעדים -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div class="bonus-card">
           <div class="bonus-card-title">🎁 בונוס תרומות החודש</div>
@@ -945,33 +961,6 @@ async function renderOperatorDashboard() {
           </div>
           ${horkTarget !== null ? buildProgressBar(horkCount, horkTarget, 'success') : ''}
           ${horkTarget !== null ? '<div class="bonus-motivational" style="background:rgba(76,175,128,0.1);color:#2E7D32">' + getHorkMotivationalMsg(horkPct) + '</div>' : ''}
-        </div>
-      </div>
-
-      <!-- נוכחות חודשית -->
-      <div style="background:white;border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;">
-        <div style="font-size:12px;font-weight:700;color:var(--primary-dark);margin-bottom:8px;">📅 נוכחות – ${monthLabel(month)}</div>
-        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">
-          <div style="text-align:center;padding:8px 4px;border-radius:8px;border-top:3px solid var(--primary);box-shadow:var(--shadow);">
-            <div style="font-size:22px;font-weight:800;color:var(--primary-dark);">${workDays}</div>
-            <div style="font-size:11px;color:var(--text-muted);">ימי עבודה</div>
-          </div>
-          <div style="text-align:center;padding:8px 4px;border-radius:8px;border-top:3px solid var(--primary);box-shadow:var(--shadow);">
-            <div style="font-size:20px;font-weight:800;color:var(--primary-dark);">${fmtDuration(totalMins)}</div>
-            <div style="font-size:11px;color:var(--text-muted);">שעות עבודה</div>
-          </div>
-          <div style="text-align:center;padding:8px 4px;border-radius:8px;border-top:3px solid var(--accent);box-shadow:var(--shadow);">
-            <div style="font-size:22px;font-weight:800;color:var(--primary-dark);">${vacDays}</div>
-            <div style="font-size:11px;color:var(--text-muted);">ימי חופשה</div>
-          </div>
-          <div style="text-align:center;padding:8px 4px;border-radius:8px;border-top:3px solid var(--danger);box-shadow:var(--shadow);">
-            <div style="font-size:22px;font-weight:800;color:var(--primary-dark);">${sickDays}</div>
-            <div style="font-size:11px;color:var(--text-muted);">ימי מחלה</div>
-          </div>
-          <div style="text-align:center;padding:8px 4px;border-radius:8px;border-top:3px solid #42A5F5;box-shadow:var(--shadow);">
-            <div style="font-size:22px;font-weight:800;color:var(--primary-dark);">${holDays}</div>
-            <div style="font-size:11px;color:var(--text-muted);">ימי חג</div>
-          </div>
         </div>
       </div>
 
