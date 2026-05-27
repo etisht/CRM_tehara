@@ -198,6 +198,22 @@
     .chart-title { font-size: 15px; font-weight: 700; color: var(--primary-dark); margin-bottom: 16px; }
     .chart-canvas-wrap { position: relative; height: 240px; }
 
+    /* TODAY WIDGET */
+    .today-widget { background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 55%, #9B6A2B 150%); border-radius: var(--radius); padding: 24px 28px; margin-bottom: 20px; color: white; box-shadow: var(--shadow-lg); }
+    .today-widget-title { font-size: 14px; font-weight: 700; color: rgba(255,255,255,0.75); margin-bottom: 16px; letter-spacing: 0.3px; }
+    .today-stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; }
+    .today-stat { text-align: center; padding: 0 12px; border-left: 1px solid rgba(255,255,255,0.15); }
+    .today-stat:last-child { border-left: none; }
+    .today-stat-icon { font-size: 22px; margin-bottom: 6px; }
+    .today-stat-num { font-size: 24px; font-weight: 800; color: white; line-height: 1.1; margin-bottom: 5px; font-variant-numeric: tabular-nums; }
+    .today-stat-num.accent { color: var(--accent-light); }
+    .today-stat-lbl { font-size: 11px; color: rgba(255,255,255,0.65); font-weight: 500; line-height: 1.3; }
+    @media (max-width: 600px) {
+      .today-stats-grid { grid-template-columns: 1fr; gap: 14px; }
+      .today-stat { border-left: none; border-bottom: 1px solid rgba(255,255,255,0.12); padding-bottom: 14px; }
+      .today-stat:last-child { border-bottom: none; padding-bottom: 0; }
+    }
+
     /* OVERLAY */
     .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 99; }
     .sidebar-overlay.open { display: block; }
@@ -217,27 +233,6 @@
       .clock-time { font-size: 36px; }
       .session-timer { font-size: 32px; }
     }
-
-    /* PROGRESS BAR */
-    .progress-wrap { background:#EDE7F6; border-radius:999px; height:14px; overflow:hidden; margin:8px 0 4px; direction:ltr; }
-    .progress-bar  { height:100%; border-radius:999px; transition:width 0.5s ease; min-width:4px; }
-    .progress-bar.primary { background:linear-gradient(90deg,var(--primary),var(--primary-light)); }
-    .progress-bar.success { background:linear-gradient(90deg,var(--success),#80CBC4); }
-    .progress-bar.accent  { background:linear-gradient(90deg,var(--accent),var(--accent-light)); }
-    .progress-pct { font-size:12px; color:var(--text-muted); text-align:left; direction:ltr; }
-
-    /* BONUS / HORK CARDS */
-    .bonus-card { background:linear-gradient(135deg,#F5F0FF,#FFF8E7); border:2px solid var(--accent); border-radius:var(--radius); padding:20px; margin-bottom:20px; }
-    .bonus-card-title { font-size:15px; font-weight:700; color:var(--primary-dark); margin-bottom:12px; }
-    .bonus-amount { font-size:32px; font-weight:800; color:var(--accent); line-height:1; margin-bottom:4px; }
-    .bonus-tier-label { font-size:13px; color:var(--text-muted); margin-bottom:10px; }
-    .bonus-motivational { font-size:13px; font-weight:600; color:var(--primary); margin-top:8px; padding:8px 12px; background:rgba(107,76,139,0.08); border-radius:8px; }
-    .hork-card { background:linear-gradient(135deg,#F0FFF4,#E8F5FF); border:2px solid var(--success); border-radius:var(--radius); padding:20px; margin-bottom:20px; }
-    .hork-card-title { font-size:15px; font-weight:700; color:var(--primary-dark); margin-bottom:12px; }
-    .hork-counts { display:flex; align-items:baseline; gap:6px; margin-bottom:6px; }
-    .hork-current { font-size:36px; font-weight:800; color:var(--success); line-height:1; }
-    .hork-target-lbl { font-size:16px; color:var(--text-muted); }
-    .hork-no-target { font-size:14px; color:var(--text-muted); font-style:italic; }
   </style>
 </head>
 <body>
@@ -370,10 +365,6 @@
   <div class="modal modal-wide">
     <div class="modal-title">💙 <span id="donation-modal-title">הוספת תרומה</span></div>
     <input type="hidden" id="donation-edit-id">
-    <div class="form-group" id="don-operator-row" style="display:none">
-      <label>טלפנית <span class="req">*</span></label>
-      <select class="form-control" id="don-operator"></select>
-    </div>
     <div class="form-group">
       <label>מספר תרומה <span class="req">*</span></label>
       <input class="form-control" type="text" id="don-number" placeholder="הזן מספר תרומה">
@@ -535,31 +526,6 @@
   </div>
 </div>
 
-<!-- Modal: Set HOR"K Target -->
-<div class="modal-backdrop" id="modal-hork-target">
-  <div class="modal">
-    <div class="modal-title">🎯 קביעת יעד הוראות קבע</div>
-    <input type="hidden" id="hork-target-uid">
-    <div class="form-group">
-      <label>טלפנית</label>
-      <input class="form-control calc-display" type="text" id="hork-target-operator-name" readonly>
-    </div>
-    <div class="form-group">
-      <label>חודש <span class="req">*</span></label>
-      <input class="form-control" type="month" id="hork-target-month" onchange="onHorkTargetMonthChange()">
-    </div>
-    <div class="form-group">
-      <label>יעד הוראות קבע <span class="req">*</span></label>
-      <input class="form-control" type="number" id="hork-target-value" placeholder="לדוגמה: 5" min="0" step="1">
-    </div>
-    <div id="hork-target-current-info" style="font-size:13px;color:var(--text-muted);margin-bottom:8px;"></div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal('modal-hork-target')">ביטול</button>
-      <button class="btn btn-primary" onclick="saveHorkTarget()">💾 שמירה</button>
-    </div>
-  </div>
-</div>
-
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -607,40 +573,6 @@ function monthLabel(m) {
 function fmtDuration(minutes) {
   const h = Math.floor(minutes/60), m = minutes%60;
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
-}
-
-// ===== PROGRESS BAR =====
-function buildProgressBar(value, max, colorClass) {
-  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
-  return `<div class="progress-wrap"><div class="progress-bar ${colorClass||'primary'}" style="width:${pct}%"></div></div><div class="progress-pct">${pct}%</div>`;
-}
-
-// ===== BONUS HELPERS =====
-const BONUS_TIER_SIZE = 25000;
-const BONUS_PER_TIER  = 375;
-
-function calcDonationBonus(totalAmount) {
-  const tiersReached        = Math.floor(totalAmount / BONUS_TIER_SIZE);
-  const bonusEarned         = tiersReached * BONUS_PER_TIER;
-  const amountInCurrentTier = totalAmount % BONUS_TIER_SIZE;
-  const amountToNextTier    = BONUS_TIER_SIZE - amountInCurrentTier;
-  return { tiersReached, bonusEarned, amountInCurrentTier, amountToNextTier };
-}
-
-function getBonusMotivationalMsg(tiersReached, pctToNext) {
-  if (tiersReached === 0 && pctToNext < 30) return 'בואי נתחיל! כל תרומה מקרבת אותך לבונוס הראשון 💪';
-  if (pctToNext < 30)  return 'מצוין! את בדרך הנכונה לבונוס הבא 🚀';
-  if (pctToNext < 70)  return 'יפה מאוד! יותר ממחצית הדרך לבונוס הבא ⭐';
-  if (pctToNext < 100) return 'כמעט שם! עוד קצת ותגיעי לבונוס הבא! 🔥';
-  return `כל הכבוד! הגעת לרמה ${tiersReached} – בונוס ${fmtCurrency(tiersReached * BONUS_PER_TIER)} 🎉`;
-}
-
-function getHorkMotivationalMsg(pct) {
-  if (pct === 0)   return 'בואי נתחיל! כל הוראת קבע מקרבת אותך ליעד 💪';
-  if (pct < 30)    return 'התחלה טובה! המשיכי כך 👍';
-  if (pct < 70)    return 'באמצע הדרך! את מתקדמת יפה ⭐';
-  if (pct < 100)   return 'כמעט שם! עוד כמה הוראות קבע ותגיעי ליעד! 🔥';
-  return 'כל הכבוד! השגת את היעד החודשי! 🏆';
 }
 function methodLabel(m) {
   return {credit:'אשראי 💳', cash:'מזומן 💵', check:"צ'ק 📋", transfer:'העברה בנקאית 🏦'}[m]||m;
@@ -824,15 +756,17 @@ function setPage(title, actionsHTML, contentHTML) {
 // ===== OPERATOR DASHBOARD =====
 async function renderOperatorDashboard() {
   const month = currentMonth();
-  const [attSnap, absSnap, donSnap, horkTargetSnap] = await Promise.all([
+  const today = todayStr();
+  const [attSnap, absSnap, donSnap] = await Promise.all([
     db.ref('attendance').orderByChild('operatorId').equalTo(currentUser.uid).once('value'),
     db.ref('absences').orderByChild('operatorId').equalTo(currentUser.uid).once('value'),
-    db.ref('donations').orderByChild('operatorId').equalTo(currentUser.uid).once('value'),
-    db.ref(`settings/horkyTargets/${currentUser.uid}/${month.replace('-','_')}`).once('value')
+    db.ref('donations').orderByChild('operatorId').equalTo(currentUser.uid).once('value')
   ]);
 
-  const attData = Object.values(attSnap.val()||{}).filter(r=>r.month===month&&r.clockOut);
+  const allAtt = Object.values(attSnap.val()||{});
+  const attData = allAtt.filter(r=>r.month===month&&r.clockOut);
   const totalMins = attData.reduce((s,r)=>s+(r.durationMinutes||0),0);
+  const workDays = new Set(attData.map(r=>r.date)).size;
   const absData = Object.values(absSnap.val()||{}).filter(r=>r.month===month);
   const vacDays = absData.filter(r=>r.type==='vacation').length;
   const sickDays = absData.filter(r=>r.type==='sick').length;
@@ -840,13 +774,15 @@ async function renderOperatorDashboard() {
   const donData = Object.values(donSnap.val()||{}).filter(r=>r.month===month);
   const donTotal = donData.reduce((s,r)=>s+(r.totalAmount||0),0);
 
-  // Bonus
-  const { tiersReached, bonusEarned, amountInCurrentTier, amountToNextTier } = calcDonationBonus(donTotal);
-  const bonusPctToNext = Math.round((amountInCurrentTier / BONUS_TIER_SIZE) * 100);
-  // HOR"K
-  const horkCount  = donData.filter(r => (r.paymentsCount || 0) > 6).length;
-  const horkTarget = horkTargetSnap.val()?.target ?? null;
-  const horkPct    = horkTarget > 0 ? Math.min(100, Math.round((horkCount / horkTarget) * 100)) : 0;
+  // ---- TODAY stats ----
+  const todayCompletedMins = allAtt.filter(r=>r.date===today&&r.clockOut).reduce((s,r)=>s+(r.durationMinutes||0),0);
+  let todayWorkMins = todayCompletedMins;
+  if (openAttendanceKey && openAttendanceClockIn) {
+    const sessionDate = new Date(openAttendanceClockIn).toISOString().slice(0,10);
+    if (sessionDate === today) todayWorkMins += Math.floor((Date.now()-openAttendanceClockIn)/60000);
+  }
+  const todayDons = donData.filter(r=>r.donationDate===today);
+  const todayDonTotal = todayDons.reduce((s,r)=>s+(r.totalAmount||0),0);
 
   const sessionHtml = openAttendanceKey
     ? `<div class="att-cell" style="border-top-color:var(--success)"><div class="att-cell-num" style="color:var(--success)">במשמרת</div><div class="att-cell-lbl">פעיל כעת</div></div>`
@@ -854,6 +790,28 @@ async function renderOperatorDashboard() {
 
   setPage('דשבורד אישי', '', `
     <div class="section-header"><h2>שלום, ${esc(userProfile.displayName)} 👋</h2></div>
+
+    <div class="today-widget">
+      <div class="today-widget-title">📅 סיכום היום – ${fmtDateStr(today)}</div>
+      <div class="today-stats-grid">
+        <div class="today-stat">
+          <div class="today-stat-icon">⏱️</div>
+          <div class="today-stat-num">${fmtDuration(todayWorkMins)}</div>
+          <div class="today-stat-lbl">זמן בעבודה היום</div>
+        </div>
+        <div class="today-stat">
+          <div class="today-stat-icon">💙</div>
+          <div class="today-stat-num">${todayDons.length}</div>
+          <div class="today-stat-lbl">תרומות חדשות היום</div>
+        </div>
+        <div class="today-stat">
+          <div class="today-stat-icon">💰</div>
+          <div class="today-stat-num accent">${fmtCurrency(todayDonTotal)}</div>
+          <div class="today-stat-lbl">סכום שהותרם היום</div>
+        </div>
+      </div>
+    </div>
+
     <div class="kpi-grid">
       ${sessionHtml}
       <div class="kpi-chip">
@@ -872,35 +830,10 @@ async function renderOperatorDashboard() {
         <div class="kpi-label">סה"כ תרומות החודש</div>
       </div>
     </div>
-    <div class="bonus-card">
-      <div class="bonus-card-title">🎁 בונוס תרומות החודש</div>
-      <div class="bonus-amount">${fmtCurrency(bonusEarned)}</div>
-      <div class="bonus-tier-label">
-        ${tiersReached > 0
-          ? `הגעת לרמה ${tiersReached} (${tiersReached} × ${fmtCurrency(BONUS_PER_TIER)})`
-          : 'טרם הגעת לרמת הבונוס הראשונה'}
-      </div>
-      <div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">התקדמות לרמה הבאה (${fmtCurrency((tiersReached + 1) * BONUS_TIER_SIZE)}):</div>
-      ${buildProgressBar(amountInCurrentTier, BONUS_TIER_SIZE, 'accent')}
-      <div style="font-size:13px;color:var(--text-muted);margin-top:4px">עוד ${fmtCurrency(amountToNextTier)} לבונוס של ${fmtCurrency((tiersReached + 1) * BONUS_PER_TIER)}</div>
-      <div class="bonus-motivational">${getBonusMotivationalMsg(tiersReached, bonusPctToNext)}</div>
-    </div>
-
-    <div class="hork-card">
-      <div class="hork-card-title">🔁 הוראות קבע החודש</div>
-      <div class="hork-counts">
-        <div class="hork-current">${horkCount}</div>
-        ${horkTarget !== null
-          ? `<div class="hork-target-lbl">/ ${horkTarget} יעד</div>`
-          : '<div class="hork-no-target">אין יעד מוגדר</div>'}
-      </div>
-      ${horkTarget !== null ? buildProgressBar(horkCount, horkTarget, 'success') : ''}
-      ${horkTarget !== null ? `<div class="bonus-motivational" style="background:rgba(76,175,128,0.1)">${getHorkMotivationalMsg(horkPct)}</div>` : ''}
-    </div>
-
     <div class="card">
       <div class="card-title">📅 סיכום חודש ${monthLabel(month)}</div>
       <div class="att-summary-grid">
+        <div class="att-cell"><div class="att-cell-num">${workDays}</div><div class="att-cell-lbl">ימי עבודה</div></div>
         <div class="att-cell"><div class="att-cell-num">${fmtDuration(totalMins)}</div><div class="att-cell-lbl">שעות עבודה</div></div>
         <div class="att-cell vacation"><div class="att-cell-num">${vacDays}</div><div class="att-cell-lbl">ימי חופשה</div></div>
         <div class="att-cell sick"><div class="att-cell-num">${sickDays}</div><div class="att-cell-lbl">ימי מחלה</div></div>
@@ -945,6 +878,7 @@ async function buildAttendanceHtml(uid, month, isAdminView = false) {
     .sort((a,b) => attSortDir === 'asc' ? a[1].clockIn - b[1].clockIn : b[1].clockIn - a[1].clockIn);
   const absData = Object.entries(absSnap.val()||{}).filter(([,r])=>r.month===month);
   const totalMins = attData.filter(([,r])=>r.clockOut).reduce((s,[,r])=>s+(r.durationMinutes||0),0);
+  const workDays = new Set(attData.filter(([,r])=>r.clockOut).map(([,r])=>r.date)).size;
   const vacDays = absData.filter(([,r])=>r.type==='vacation').length;
   const sickDays = absData.filter(([,r])=>r.type==='sick').length;
   const holDays = absData.filter(([,r])=>r.type==='holiday').length;
@@ -1018,6 +952,7 @@ async function buildAttendanceHtml(uid, month, isAdminView = false) {
     <div class="card">
       <div class="card-title">📊 סיכום חודש ${monthLabel(month)}</div>
       <div class="att-summary-grid">
+        <div class="att-cell"><div class="att-cell-num">${workDays}</div><div class="att-cell-lbl">ימי עבודה</div></div>
         <div class="att-cell"><div class="att-cell-num">${fmtDuration(totalMins)}</div><div class="att-cell-lbl">שעות עבודה</div></div>
         <div class="att-cell vacation"><div class="att-cell-num">${vacDays}</div><div class="att-cell-lbl">ימי חופשה</div></div>
         <div class="att-cell sick"><div class="att-cell-num">${sickDays}</div><div class="att-cell-lbl">ימי מחלה</div></div>
@@ -1155,11 +1090,14 @@ async function loadAdminAttendance() {
         db.ref('absences').orderByChild('operatorId').equalTo(uid).once('value'),
         db.ref(`monthApprovals/${uid}/${month.replace('-','_')}`).once('value')
       ]);
-      const totalMins = Object.values(attSnap.val()||{}).filter(r=>r.month===month&&r.clockOut).reduce((s,r)=>s+(r.durationMinutes||0),0);
+      const attRecords = Object.values(attSnap.val()||{}).filter(r=>r.month===month&&r.clockOut);
+      const totalMins = attRecords.reduce((s,r)=>s+(r.durationMinutes||0),0);
+      const workDays = new Set(attRecords.map(r=>r.date)).size;
       const absData = Object.values(absSnap.val()||{}).filter(r=>r.month===month);
       const approved = !!approvedSnap.val();
       rows += `<tr>
         <td>${esc(profile.displayName)}</td>
+        <td>${workDays}</td>
         <td>${fmtDuration(totalMins)}</td>
         <td>${absData.filter(r=>r.type==='vacation').length}</td>
         <td>${absData.filter(r=>r.type==='sick').length}</td>
@@ -1176,8 +1114,8 @@ async function loadAdminAttendance() {
       </tr>`;
     }
     el.innerHTML = `<div class="table-wrap"><table class="data-table">
-      <thead><tr><th>שם טלפנית</th><th>שעות עבודה</th><th>חופשה</th><th>מחלה</th><th>חג</th><th>סטטוס</th><th>פעולות</th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">אין נתונים</td></tr>'}</tbody>
+      <thead><tr><th>שם טלפנית</th><th>ימי עבודה</th><th>שעות עבודה</th><th>חופשה</th><th>מחלה</th><th>חג</th><th>סטטוס</th><th>פעולות</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="8" style="text-align:center;color:var(--text-muted)">אין נתונים</td></tr>'}</tbody>
     </table></div>`;
   }
 }
@@ -1487,12 +1425,6 @@ function openAddDonation() {
   document.getElementById('don-method').value = 'credit';
   document.getElementById('don-notes').value = '';
   populateCampaignDropdown('don-campaign');
-  if (userProfile.role === 'admin') {
-    document.getElementById('don-operator-row').style.display = 'block';
-    populateOperatorDropdown('don-operator');
-  } else {
-    document.getElementById('don-operator-row').style.display = 'none';
-  }
   openModal('modal-donation');
 }
 
@@ -1513,22 +1445,8 @@ function openEditDonation(id) {
     document.getElementById('don-method').value = r.paymentMethod||'credit';
     document.getElementById('don-notes').value = r.notes||'';
     populateCampaignDropdown('don-campaign', r.campaignId);
-    if (userProfile.role === 'admin') {
-      document.getElementById('don-operator-row').style.display = 'block';
-      populateOperatorDropdown('don-operator', r.operatorId);
-    } else {
-      document.getElementById('don-operator-row').style.display = 'none';
-    }
     openModal('modal-donation');
   });
-}
-
-function populateOperatorDropdown(selId, selectedId) {
-  const sel = document.getElementById(selId);
-  sel.innerHTML = '<option value="">-- בחר טלפנית --</option>' +
-    Object.entries(allOperators)
-      .filter(([,p]) => p.role === 'operator' && p.isActive !== false)
-      .map(([uid,p]) => `<option value="${uid}" ${uid === selectedId ? 'selected' : ''}>${esc(p.displayName)}</option>`).join('');
 }
 
 function populateCampaignDropdown(selId, selectedId) {
@@ -1556,16 +1474,6 @@ async function saveDonation() {
   const method = document.getElementById('don-method').value;
   const donorType = document.getElementById('don-donor-type').value;
 
-  // Resolve operator (admin can assign to another operator)
-  let opId = currentUser.uid;
-  let opName = userProfile.displayName;
-  if (userProfile.role === 'admin') {
-    const selOpId = document.getElementById('don-operator')?.value;
-    if (!selOpId) { showToast('נא לבחור טלפנית','error'); return; }
-    opId = selOpId;
-    opName = allOperators[selOpId]?.displayName || selOpId;
-  }
-
   if (!donationNumber || !donorName || !date || !payments || !amount || !campaignId) {
     showToast('נא למלא את כל שדות החובה','error'); return;
   }
@@ -1576,8 +1484,8 @@ async function saveDonation() {
 
   const record = {
     donationNumber,
-    operatorId: opId,
-    operatorName: opName,
+    operatorId: currentUser.uid,
+    operatorName: userProfile.displayName,
     donorName,
     donorPhone: document.getElementById('don-phone').value.trim(),
     donationDate: date,
@@ -1691,96 +1599,40 @@ async function loadReports() {
   `;
 
   // Draw charts
-  if (opEntries.length) drawPieChart('chart-operators', opEntries.map(([,v])=>v.name), opEntries.map(([,v])=>v.total));
-  if (campEntries.length) drawPieChart('chart-campaigns', campEntries.map(([k])=>k), campEntries.map(([,v])=>v.total));
+  if (opEntries.length) drawBarChart('chart-operators', opEntries.map(([,v])=>v.name), opEntries.map(([,v])=>v.total), '#6B4C8B');
+  if (campEntries.length) drawBarChart('chart-campaigns', campEntries.map(([k])=>k), campEntries.map(([,v])=>v.total), '#C9A84C');
 }
 
-const PIE_COLORS = ['#6B4C8B','#C9A84C','#4CAF80','#42A5F5','#E05555','#F0A500','#9B59B6','#00BCD4','#FF7043','#8BC34A','#EC407A','#26A69A'];
-
-function drawPieChart(canvasId, labels, values) {
+function drawBarChart(canvasId, labels, values, color) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
-  const W = canvas.parentElement.clientWidth || 400;
-  const legendRows = Math.ceil(labels.length / 2);
-  canvas.width = W;
-  canvas.height = 260 + legendRows * 26;
+  canvas.width = canvas.parentElement.clientWidth || 400;
+  canvas.height = 200;
   const ctx = canvas.getContext('2d');
-  const total = values.reduce((a, b) => a + b, 0);
-  if (!total) return;
+  const max = Math.max(...values) || 1;
+  const n = labels.length;
+  const padL = 10, padR = 10, padT = 10, padB = 40;
+  const w = canvas.width - padL - padR;
+  const h = canvas.height - padT - padB;
+  const barW = Math.max(20, w/n - 8);
 
-  const colors = values.map((_, i) => PIE_COLORS[i % PIE_COLORS.length]);
-  const cx = W / 2;
-  const cy = 115;
-  const r = Math.min(95, W / 3);
-
-  ctx.clearRect(0, 0, W, canvas.height);
-
-  // Draw slices
-  let startAngle = -Math.PI / 2;
-  values.forEach((val, i) => {
-    const slice = (val / total) * 2 * Math.PI;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, r, startAngle, startAngle + slice);
-    ctx.closePath();
-    ctx.fillStyle = colors[i];
-    ctx.fill();
-    ctx.strokeStyle = 'white';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    // Percentage label inside slice
-    if (slice > 0.22) {
-      const midAngle = startAngle + slice / 2;
-      const pct = Math.round(val / total * 100);
-      const lx = cx + Math.cos(midAngle) * r * 0.62;
-      const ly = cy + Math.sin(midAngle) * r * 0.62;
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 12px Heebo';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(pct + '%', lx, ly);
-    }
-    startAngle += slice;
-  });
-
-  // Center hole (donut effect)
-  ctx.beginPath();
-  ctx.arc(cx, cy, r * 0.42, 0, 2 * Math.PI);
-  ctx.fillStyle = 'white';
-  ctx.fill();
-
-  // Total label in center
-  ctx.fillStyle = '#4A3060';
-  ctx.font = 'bold 13px Heebo';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('סה"כ', cx, cy - 9);
-  ctx.font = 'bold 12px Heebo';
-  ctx.fillStyle = '#6B4C8B';
-  ctx.fillText(fmtCurrency(total), cx, cy + 9);
-
-  // Legend (2 columns)
-  const legTop = cy + r + 18;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
   labels.forEach((lbl, i) => {
-    const col = i % 2;
-    const row = Math.floor(i / 2);
-    const lx = col === 0 ? 14 : W / 2 + 14;
-    const ly = legTop + row * 26;
-
-    // Color dot
+    const x = padL + i*(w/n) + (w/n-barW)/2;
+    const barH = (values[i]/max)*h;
+    const y = padT + h - barH;
+    ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(lx + 7, ly + 7, 7, 0, 2 * Math.PI);
-    ctx.fillStyle = colors[i];
+    ctx.roundRect(x, y, barW, barH, 4);
     ctx.fill();
-
-    // Label text
+    // value
     ctx.fillStyle = '#2C2035';
-    ctx.font = '12px Heebo';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    const shortLbl = lbl.length > 11 ? lbl.slice(0, 10) + '…' : lbl;
-    ctx.fillText(shortLbl + ' · ' + fmtCurrency(values[i]), lx + 20, ly + 7);
+    ctx.font = '11px Heebo';
+    ctx.textAlign = 'center';
+    ctx.fillText(fmtCurrency(values[i]), x+barW/2, y-4);
+    // label
+    ctx.fillStyle = '#6B5B7A';
+    ctx.fillText(lbl.length>8 ? lbl.slice(0,7)+'…' : lbl, x+barW/2, canvas.height-8);
   });
 }
 
@@ -1908,6 +1760,7 @@ async function deleteExpense(id) {
 // ===== ADMIN DASHBOARD =====
 async function renderAdminDashboard() {
   const month = currentMonth();
+  const today = todayStr();
   const [donSnap, expSnap, attSnap] = await Promise.all([
     db.ref('donations').orderByChild('month').equalTo(month).once('value'),
     db.ref('expenses').orderByChild('month').equalTo(month).once('value'),
@@ -1915,9 +1768,17 @@ async function renderAdminDashboard() {
   ]);
   const donations = Object.values(donSnap.val()||{});
   const expenses = Object.values(expSnap.val()||{});
+  const attRecords = Object.values(attSnap.val()||{});
   const totalDon = donations.reduce((s,r)=>s+(r.totalAmount||0),0);
   const totalExp = expenses.reduce((s,r)=>s+(r.amount||0),0);
   const activeOps = new Set(donations.map(r=>r.operatorId)).size;
+
+  // ---- TODAY stats (admin - all operators) ----
+  const todayDons = donations.filter(r=>r.donationDate===today);
+  const todayDonTotal = todayDons.reduce((s,r)=>s+(r.totalAmount||0),0);
+  const todayAtt = attRecords.filter(r=>r.date===today);
+  const todayWorkMins = todayAtt.filter(r=>r.clockOut).reduce((s,r)=>s+(r.durationMinutes||0),0);
+  const todayActiveOps = new Set(todayAtt.map(r=>r.operatorId)).size;
 
   // Top operator
   const byOp = {};
@@ -1926,6 +1787,28 @@ async function renderAdminDashboard() {
 
   setPage('דשבורד מנהל', '', `
     <div class="section-header"><h2>📊 דשבורד – ${monthLabel(month)}</h2></div>
+
+    <div class="today-widget">
+      <div class="today-widget-title">📅 סיכום היום – ${fmtDateStr(today)}</div>
+      <div class="today-stats-grid">
+        <div class="today-stat">
+          <div class="today-stat-icon">⏱️</div>
+          <div class="today-stat-num">${fmtDuration(todayWorkMins)}</div>
+          <div class="today-stat-lbl">שעות עבודה מצטברות<br>של כל הטלפניות היום</div>
+        </div>
+        <div class="today-stat">
+          <div class="today-stat-icon">💙</div>
+          <div class="today-stat-num">${todayDons.length}</div>
+          <div class="today-stat-lbl">תרומות חדשות שנוספו היום</div>
+        </div>
+        <div class="today-stat">
+          <div class="today-stat-icon">💰</div>
+          <div class="today-stat-num accent">${fmtCurrency(todayDonTotal)}</div>
+          <div class="today-stat-lbl">סכום שהותרם היום</div>
+        </div>
+      </div>
+    </div>
+
     <div class="kpi-grid">
       <div class="kpi-chip">
         <div class="kpi-icon">💙</div>
@@ -1945,7 +1828,7 @@ async function renderAdminDashboard() {
       <div class="kpi-chip success">
         <div class="kpi-icon">👥</div>
         <div class="kpi-num">${activeOps}</div>
-        <div class="kpi-label">טלפניות פעילות</div>
+        <div class="kpi-label">טלפניות פעילות החודש</div>
       </div>
     </div>
     ${topOp ? `<div class="card"><div class="card-title">🏆 טלפנית מובילה החודש</div>
@@ -1974,7 +1857,6 @@ async function renderAdminUsersPage() {
     <td><span class="tag ${p.isActive===false?'tag-danger':'tag-success'}">${p.isActive===false?'לא פעיל':'פעיל'}</span></td>
     <td style="display:flex;gap:6px;flex-wrap:wrap;">
       <button class="btn btn-ghost btn-sm" onclick="openEditUser('${uid}')">✏️ עריכה</button>
-      ${p.role === 'operator' ? `<button class="btn btn-accent btn-sm" onclick="openSetHorkTarget('${uid}')">🎯 יעדים</button>` : ''}
       <button class="btn btn-danger btn-sm" onclick="deleteUser('${uid}')">🗑️ מחיקה</button>
     </td>
   </tr>`).join('');
@@ -2217,51 +2099,6 @@ async function deleteExpenseType(id) {
   allExpenseTypes[id].isActive = false;
   showToast('בוצע','success');
   renderAdminSettingsPage();
-}
-
-// ===== HOR"K TARGETS =====
-function openSetHorkTarget(uid) {
-  const profile = allOperators[uid];
-  if (!profile) return;
-  document.getElementById('hork-target-uid').value = uid;
-  document.getElementById('hork-target-operator-name').value = profile.displayName || uid;
-  document.getElementById('hork-target-month').value = currentMonth();
-  document.getElementById('hork-target-value').value = '';
-  document.getElementById('hork-target-current-info').textContent = '';
-  openModal('modal-hork-target');
-  loadHorkTargetForModal(uid, currentMonth());
-}
-
-async function loadHorkTargetForModal(uid, month) {
-  const snap = await db.ref(`settings/horkyTargets/${uid}/${month.replace('-','_')}`).once('value');
-  const existing = snap.val();
-  const info = document.getElementById('hork-target-current-info');
-  if (!info) return;
-  if (existing && existing.target != null) {
-    document.getElementById('hork-target-value').value = existing.target;
-    info.textContent = `יעד קיים ל-${monthLabel(month)}: ${existing.target} הוראות קבע`;
-  } else {
-    info.textContent = `אין יעד מוגדר ל-${monthLabel(month)} עדיין`;
-  }
-}
-
-async function onHorkTargetMonthChange() {
-  const uid   = document.getElementById('hork-target-uid').value;
-  const month = document.getElementById('hork-target-month').value;
-  if (uid && month) loadHorkTargetForModal(uid, month);
-}
-
-async function saveHorkTarget() {
-  const uid    = document.getElementById('hork-target-uid').value;
-  const month  = document.getElementById('hork-target-month').value;
-  const target = parseInt(document.getElementById('hork-target-value').value, 10);
-  if (!uid || !month)              { showToast('שגיאה פנימית','error'); return; }
-  if (isNaN(target) || target < 0) { showToast('נא להזין יעד חוקי','error'); return; }
-  await db.ref(`settings/horkyTargets/${uid}/${month.replace('-','_')}`).set({
-    target, setBy: currentUser.uid, setAt: Date.now()
-  });
-  closeModal('modal-hork-target');
-  showToast(`✅ יעד נשמר עבור ${allOperators[uid]?.displayName||uid} – ${monthLabel(month)}`, 'success');
 }
 
 // Close modals on backdrop click

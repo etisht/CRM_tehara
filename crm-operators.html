@@ -198,6 +198,22 @@
     .chart-title { font-size: 15px; font-weight: 700; color: var(--primary-dark); margin-bottom: 16px; }
     .chart-canvas-wrap { position: relative; height: 240px; }
 
+    /* TODAY WIDGET */
+    .today-widget { background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 55%, #9B6A2B 150%); border-radius: var(--radius); padding: 24px 28px; margin-bottom: 20px; color: white; box-shadow: var(--shadow-lg); }
+    .today-widget-title { font-size: 14px; font-weight: 700; color: rgba(255,255,255,0.75); margin-bottom: 16px; letter-spacing: 0.3px; }
+    .today-stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; }
+    .today-stat { text-align: center; padding: 0 12px; border-left: 1px solid rgba(255,255,255,0.15); }
+    .today-stat:last-child { border-left: none; }
+    .today-stat-icon { font-size: 22px; margin-bottom: 6px; }
+    .today-stat-num { font-size: 24px; font-weight: 800; color: white; line-height: 1.1; margin-bottom: 5px; font-variant-numeric: tabular-nums; }
+    .today-stat-num.accent { color: var(--accent-light); }
+    .today-stat-lbl { font-size: 11px; color: rgba(255,255,255,0.65); font-weight: 500; line-height: 1.3; }
+    @media (max-width: 600px) {
+      .today-stats-grid { grid-template-columns: 1fr; gap: 14px; }
+      .today-stat { border-left: none; border-bottom: 1px solid rgba(255,255,255,0.12); padding-bottom: 14px; }
+      .today-stat:last-child { border-bottom: none; padding-bottom: 0; }
+    }
+
     /* OVERLAY */
     .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 99; }
     .sidebar-overlay.open { display: block; }
@@ -740,14 +756,17 @@ function setPage(title, actionsHTML, contentHTML) {
 // ===== OPERATOR DASHBOARD =====
 async function renderOperatorDashboard() {
   const month = currentMonth();
+  const today = todayStr();
   const [attSnap, absSnap, donSnap] = await Promise.all([
     db.ref('attendance').orderByChild('operatorId').equalTo(currentUser.uid).once('value'),
     db.ref('absences').orderByChild('operatorId').equalTo(currentUser.uid).once('value'),
     db.ref('donations').orderByChild('operatorId').equalTo(currentUser.uid).once('value')
   ]);
 
-  const attData = Object.values(attSnap.val()||{}).filter(r=>r.month===month&&r.clockOut);
+  const allAtt = Object.values(attSnap.val()||{});
+  const attData = allAtt.filter(r=>r.month===month&&r.clockOut);
   const totalMins = attData.reduce((s,r)=>s+(r.durationMinutes||0),0);
+  const workDays = new Set(attData.map(r=>r.date)).size;
   const absData = Object.values(absSnap.val()||{}).filter(r=>r.month===month);
   const vacDays = absData.filter(r=>r.type==='vacation').length;
   const sickDays = absData.filter(r=>r.type==='sick').length;
@@ -755,12 +774,44 @@ async function renderOperatorDashboard() {
   const donData = Object.values(donSnap.val()||{}).filter(r=>r.month===month);
   const donTotal = donData.reduce((s,r)=>s+(r.totalAmount||0),0);
 
+  // ---- TODAY stats ----
+  const todayCompletedMins = allAtt.filter(r=>r.date===today&&r.clockOut).reduce((s,r)=>s+(r.durationMinutes||0),0);
+  let todayWorkMins = todayCompletedMins;
+  if (openAttendanceKey && openAttendanceClockIn) {
+    const sessionDate = new Date(openAttendanceClockIn).toISOString().slice(0,10);
+    if (sessionDate === today) todayWorkMins += Math.floor((Date.now()-openAttendanceClockIn)/60000);
+  }
+  const todayDons = donData.filter(r=>r.donationDate===today);
+  const todayDonTotal = todayDons.reduce((s,r)=>s+(r.totalAmount||0),0);
+
   const sessionHtml = openAttendanceKey
     ? `<div class="att-cell" style="border-top-color:var(--success)"><div class="att-cell-num" style="color:var(--success)">במשמרת</div><div class="att-cell-lbl">פעיל כעת</div></div>`
     : `<div class="att-cell" style="border-top-color:var(--text-muted)"><div class="att-cell-num" style="font-size:18px;color:var(--text-muted)">לא במשמרת</div><div class="att-cell-lbl">היום</div></div>`;
 
   setPage('דשבורד אישי', '', `
     <div class="section-header"><h2>שלום, ${esc(userProfile.displayName)} 👋</h2></div>
+
+    <div class="today-widget">
+      <div class="today-widget-title">📅 סיכום היום – ${fmtDateStr(today)}</div>
+      <div class="today-stats-grid">
+        <div class="today-stat">
+          <div class="today-stat-icon">⏱️</div>
+          <div class="today-stat-num">${fmtDuration(todayWorkMins)}</div>
+          <div class="today-stat-lbl">זמן בעבודה היום</div>
+        </div>
+        <div class="today-stat">
+          <div class="today-stat-icon">💙</div>
+          <div class="today-stat-num">${todayDons.length}</div>
+          <div class="today-stat-lbl">תרומות חדשות היום</div>
+        </div>
+        <div class="today-stat">
+          <div class="today-stat-icon">💰</div>
+          <div class="today-stat-num accent">${fmtCurrency(todayDonTotal)}</div>
+          <div class="today-stat-lbl">סכום שהותרם היום</div>
+        </div>
+      </div>
+    </div>
+
     <div class="kpi-grid">
       ${sessionHtml}
       <div class="kpi-chip">
@@ -782,6 +833,7 @@ async function renderOperatorDashboard() {
     <div class="card">
       <div class="card-title">📅 סיכום חודש ${monthLabel(month)}</div>
       <div class="att-summary-grid">
+        <div class="att-cell"><div class="att-cell-num">${workDays}</div><div class="att-cell-lbl">ימי עבודה</div></div>
         <div class="att-cell"><div class="att-cell-num">${fmtDuration(totalMins)}</div><div class="att-cell-lbl">שעות עבודה</div></div>
         <div class="att-cell vacation"><div class="att-cell-num">${vacDays}</div><div class="att-cell-lbl">ימי חופשה</div></div>
         <div class="att-cell sick"><div class="att-cell-num">${sickDays}</div><div class="att-cell-lbl">ימי מחלה</div></div>
@@ -826,6 +878,7 @@ async function buildAttendanceHtml(uid, month, isAdminView = false) {
     .sort((a,b) => attSortDir === 'asc' ? a[1].clockIn - b[1].clockIn : b[1].clockIn - a[1].clockIn);
   const absData = Object.entries(absSnap.val()||{}).filter(([,r])=>r.month===month);
   const totalMins = attData.filter(([,r])=>r.clockOut).reduce((s,[,r])=>s+(r.durationMinutes||0),0);
+  const workDays = new Set(attData.filter(([,r])=>r.clockOut).map(([,r])=>r.date)).size;
   const vacDays = absData.filter(([,r])=>r.type==='vacation').length;
   const sickDays = absData.filter(([,r])=>r.type==='sick').length;
   const holDays = absData.filter(([,r])=>r.type==='holiday').length;
@@ -899,6 +952,7 @@ async function buildAttendanceHtml(uid, month, isAdminView = false) {
     <div class="card">
       <div class="card-title">📊 סיכום חודש ${monthLabel(month)}</div>
       <div class="att-summary-grid">
+        <div class="att-cell"><div class="att-cell-num">${workDays}</div><div class="att-cell-lbl">ימי עבודה</div></div>
         <div class="att-cell"><div class="att-cell-num">${fmtDuration(totalMins)}</div><div class="att-cell-lbl">שעות עבודה</div></div>
         <div class="att-cell vacation"><div class="att-cell-num">${vacDays}</div><div class="att-cell-lbl">ימי חופשה</div></div>
         <div class="att-cell sick"><div class="att-cell-num">${sickDays}</div><div class="att-cell-lbl">ימי מחלה</div></div>
@@ -1036,11 +1090,14 @@ async function loadAdminAttendance() {
         db.ref('absences').orderByChild('operatorId').equalTo(uid).once('value'),
         db.ref(`monthApprovals/${uid}/${month.replace('-','_')}`).once('value')
       ]);
-      const totalMins = Object.values(attSnap.val()||{}).filter(r=>r.month===month&&r.clockOut).reduce((s,r)=>s+(r.durationMinutes||0),0);
+      const attRecords = Object.values(attSnap.val()||{}).filter(r=>r.month===month&&r.clockOut);
+      const totalMins = attRecords.reduce((s,r)=>s+(r.durationMinutes||0),0);
+      const workDays = new Set(attRecords.map(r=>r.date)).size;
       const absData = Object.values(absSnap.val()||{}).filter(r=>r.month===month);
       const approved = !!approvedSnap.val();
       rows += `<tr>
         <td>${esc(profile.displayName)}</td>
+        <td>${workDays}</td>
         <td>${fmtDuration(totalMins)}</td>
         <td>${absData.filter(r=>r.type==='vacation').length}</td>
         <td>${absData.filter(r=>r.type==='sick').length}</td>
@@ -1057,8 +1114,8 @@ async function loadAdminAttendance() {
       </tr>`;
     }
     el.innerHTML = `<div class="table-wrap"><table class="data-table">
-      <thead><tr><th>שם טלפנית</th><th>שעות עבודה</th><th>חופשה</th><th>מחלה</th><th>חג</th><th>סטטוס</th><th>פעולות</th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">אין נתונים</td></tr>'}</tbody>
+      <thead><tr><th>שם טלפנית</th><th>ימי עבודה</th><th>שעות עבודה</th><th>חופשה</th><th>מחלה</th><th>חג</th><th>סטטוס</th><th>פעולות</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="8" style="text-align:center;color:var(--text-muted)">אין נתונים</td></tr>'}</tbody>
     </table></div>`;
   }
 }
@@ -1703,6 +1760,7 @@ async function deleteExpense(id) {
 // ===== ADMIN DASHBOARD =====
 async function renderAdminDashboard() {
   const month = currentMonth();
+  const today = todayStr();
   const [donSnap, expSnap, attSnap] = await Promise.all([
     db.ref('donations').orderByChild('month').equalTo(month).once('value'),
     db.ref('expenses').orderByChild('month').equalTo(month).once('value'),
@@ -1710,9 +1768,17 @@ async function renderAdminDashboard() {
   ]);
   const donations = Object.values(donSnap.val()||{});
   const expenses = Object.values(expSnap.val()||{});
+  const attRecords = Object.values(attSnap.val()||{});
   const totalDon = donations.reduce((s,r)=>s+(r.totalAmount||0),0);
   const totalExp = expenses.reduce((s,r)=>s+(r.amount||0),0);
   const activeOps = new Set(donations.map(r=>r.operatorId)).size;
+
+  // ---- TODAY stats (admin - all operators) ----
+  const todayDons = donations.filter(r=>r.donationDate===today);
+  const todayDonTotal = todayDons.reduce((s,r)=>s+(r.totalAmount||0),0);
+  const todayAtt = attRecords.filter(r=>r.date===today);
+  const todayWorkMins = todayAtt.filter(r=>r.clockOut).reduce((s,r)=>s+(r.durationMinutes||0),0);
+  const todayActiveOps = new Set(todayAtt.map(r=>r.operatorId)).size;
 
   // Top operator
   const byOp = {};
@@ -1721,6 +1787,28 @@ async function renderAdminDashboard() {
 
   setPage('דשבורד מנהל', '', `
     <div class="section-header"><h2>📊 דשבורד – ${monthLabel(month)}</h2></div>
+
+    <div class="today-widget">
+      <div class="today-widget-title">📅 סיכום היום – ${fmtDateStr(today)}</div>
+      <div class="today-stats-grid">
+        <div class="today-stat">
+          <div class="today-stat-icon">⏱️</div>
+          <div class="today-stat-num">${fmtDuration(todayWorkMins)}</div>
+          <div class="today-stat-lbl">שעות עבודה מצטברות<br>של כל הטלפניות היום</div>
+        </div>
+        <div class="today-stat">
+          <div class="today-stat-icon">💙</div>
+          <div class="today-stat-num">${todayDons.length}</div>
+          <div class="today-stat-lbl">תרומות חדשות שנוספו היום</div>
+        </div>
+        <div class="today-stat">
+          <div class="today-stat-icon">💰</div>
+          <div class="today-stat-num accent">${fmtCurrency(todayDonTotal)}</div>
+          <div class="today-stat-lbl">סכום שהותרם היום</div>
+        </div>
+      </div>
+    </div>
+
     <div class="kpi-grid">
       <div class="kpi-chip">
         <div class="kpi-icon">💙</div>
@@ -1740,7 +1828,7 @@ async function renderAdminDashboard() {
       <div class="kpi-chip success">
         <div class="kpi-icon">👥</div>
         <div class="kpi-num">${activeOps}</div>
-        <div class="kpi-label">טלפניות פעילות</div>
+        <div class="kpi-label">טלפניות פעילות החודש</div>
       </div>
     </div>
     ${topOp ? `<div class="card"><div class="card-title">🏆 טלפנית מובילה החודש</div>
