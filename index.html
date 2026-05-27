@@ -915,19 +915,21 @@ async function doLogin() {
       return;
     }
 
-    // 3️⃣ Migration: create Firebase Auth account with the ENTERED password
+    // 3️⃣ Try to create/migrate Firebase Auth account (best-effort — not required to log in)
+    const _authUnavailable = c =>
+      c === 'auth/configuration-not-found' ||
+      c === 'auth/operation-not-allowed'   ||
+      c === 'auth/unauthorized-domain'     ||
+      c === 'auth/email-already-in-use';
     try {
       const userCred = await firebase.auth().createUserWithEmailAndPassword(email, pass);
-      // Link the DB profile to the Firebase Auth UID and clear stored password
-      await db.ref('users/' + found.uid).update({ authUid: userCred.user.uid, password: null });
+      await db.ref('users/' + found.uid).update({ authUid: userCred.user.uid });
       _loginAttempts.count = 0;
       // onAuthStateChanged will fire → startApp
     } catch (createErr) {
-      if (createErr.code === 'auth/email-already-in-use') {
-        // Firebase Auth account exists but password is out of sync (admin changed DB password).
-        // Graceful fallback: start app directly this session.
-        // Admin should delete the Firebase Auth account from Firebase Console to complete the reset.
-        console.warn('Firebase Auth email already in use — running without Auth this session. Admin: delete the Firebase Auth account from the console to sync.');
+      // Firebase Auth not set up yet OR account already exists — run app on DB auth only
+      if (_authUnavailable(createErr.code)) {
+        console.warn('Firebase Auth unavailable, running on DB auth:', createErr.code);
         const { password: _pw, ...userNoPw } = found;
         currentUser = userNoPw;
         userProfile = currentUser;
