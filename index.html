@@ -876,84 +876,105 @@ async function renderOperatorDashboard() {
     : `<div class="att-cell" style="border-top-color:var(--text-muted)"><div class="att-cell-num" style="font-size:18px;color:var(--text-muted)">לא במשמרת</div><div class="att-cell-lbl">היום</div></div>`;
 
   setPage('דשבורד אישי', '', `
-    <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-      <h2 style="margin:0;">שלום, ${esc(userProfile.displayName)} 👋</h2>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="btn btn-success" onclick="showPage('attendance')">🕐 שעון נוכחות</button>
-        <button class="btn btn-primary" onclick="openAddDonation()">➕ הוספת תרומה</button>
-        <button class="btn btn-ghost" onclick="showPage('my-donations')">💙 התרומות שלי</button>
-      </div>
-    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
 
-    <div class="today-widget">
-      <div class="today-widget-title">📅 סיכום היום – ${fmtDateStr(today)}</div>
-      <div class="today-stats-grid">
-        <div class="today-stat">
-          <div class="today-stat-icon">⏱️</div>
-          <div class="today-stat-num">${fmtDuration(todayWorkMins)}</div>
-          <div class="today-stat-lbl">זמן בעבודה היום</div>
-        </div>
-        <div class="today-stat">
-          <div class="today-stat-icon">💙</div>
-          <div class="today-stat-num">${todayDons.length}</div>
-          <div class="today-stat-lbl">תרומות חדשות היום</div>
-        </div>
-        <div class="today-stat">
-          <div class="today-stat-icon">💰</div>
-          <div class="today-stat-num accent">${fmtCurrency(todayDonTotal)}</div>
-          <div class="today-stat-lbl">סכום שהותרם היום</div>
+      <!-- כותרת + כפתורים -->
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+        <h2 style="margin:0;font-size:20px;font-weight:800;color:var(--primary-dark);">שלום, ${esc(userProfile.displayName)} 👋</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-success btn-sm" onclick="showPage('attendance')">🕐 שעון נוכחות</button>
+          <button class="btn btn-primary btn-sm" onclick="openAddDonation()">➕ הוספת תרומה</button>
+          <button class="btn btn-ghost btn-sm" onclick="showPage('my-donations')">💙 התרומות שלי</button>
         </div>
       </div>
-    </div>
 
-    <div class="kpi-grid">
-      ${sessionHtml}
-      <div class="kpi-chip">
-        <div class="kpi-icon">⏱️</div>
-        <div class="kpi-num">${fmtDuration(totalMins)}</div>
-        <div class="kpi-label">שעות עבודה החודש</div>
-      </div>
-      <div class="kpi-chip success">
-        <div class="kpi-icon">💙</div>
-        <div class="kpi-num">${donData.length}</div>
-        <div class="kpi-label">תרומות החודש</div>
-      </div>
-      <div class="kpi-chip accent">
-        <div class="kpi-icon">💰</div>
-        <div class="kpi-num">${fmtCurrency(donTotal)}</div>
-        <div class="kpi-label">סה"כ תרומות החודש</div>
-      </div>
-    </div>
-    <div class="goals-row">
-      <div class="bonus-card">
-        <div class="bonus-card-title">🎁 בונוס תרומות החודש</div>
-        <div class="bonus-amount">${fmtCurrency(bonusEarned)}</div>
-        <div class="bonus-tier-label">${tiersReached > 0 ? `רמה ${tiersReached} · ${tiersReached}×${fmtCurrency(BONUS_PER_TIER)}` : 'טרם הגעת לרמה הראשונה'}</div>
-        <div style="font-size:11px;color:var(--text-muted)">לרמה הבאה (${fmtCurrency((tiersReached+1)*BONUS_TIER_SIZE)}):</div>
-        ${buildProgressBar(amountInCurrentTier, BONUS_TIER_SIZE, 'accent')}
-        <div style="font-size:11px;color:var(--text-muted)">עוד ${fmtCurrency(amountToNextTier)}</div>
-        <div class="bonus-motivational">${getBonusMotivationalMsg(tiersReached, bonusPctToNext)}</div>
-      </div>
-      <div class="hork-card">
-        <div class="hork-card-title">🔁 הוראות קבע החודש</div>
-        <div class="hork-counts">
-          <div class="hork-current">${horkCount}</div>
-          ${horkTarget !== null ? `<div class="hork-target-lbl">/ ${horkTarget} יעד</div>` : '<div class="hork-no-target">אין יעד מוגדר</div>'}
+      <!-- סטטיסטיקות היום + החודש -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div style="background:linear-gradient(135deg,var(--primary-dark),var(--primary));border-radius:var(--radius);padding:12px 16px;color:white;">
+          <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:8px;">📅 סיכום היום – ${fmtDateStr(today)}</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);">
+            <div style="text-align:center;padding:0 6px;border-left:1px solid rgba(255,255,255,0.15);">
+              <div style="font-size:18px;font-weight:800;line-height:1.2;">${fmtDuration(todayWorkMins)}</div>
+              <div style="font-size:10px;color:rgba(255,255,255,0.65);">שעות</div>
+            </div>
+            <div style="text-align:center;padding:0 6px;border-left:1px solid rgba(255,255,255,0.15);">
+              <div style="font-size:18px;font-weight:800;line-height:1.2;">${todayDons.length}</div>
+              <div style="font-size:10px;color:rgba(255,255,255,0.65);">תרומות</div>
+            </div>
+            <div style="text-align:center;padding:0 6px;">
+              <div style="font-size:18px;font-weight:800;line-height:1.2;color:var(--accent-light);">${fmtCurrency(todayDonTotal)}</div>
+              <div style="font-size:10px;color:rgba(255,255,255,0.65);">סכום</div>
+            </div>
+          </div>
         </div>
-        ${horkTarget !== null ? buildProgressBar(horkCount, horkTarget, 'success') : ''}
-        ${horkTarget !== null ? `<div class="bonus-motivational" style="background:rgba(76,175,128,0.1);color:#2E7D32">${getHorkMotivationalMsg(horkPct)}</div>` : ''}
+        <div style="background:linear-gradient(135deg,#2E3B6E,#4A5FA8);border-radius:var(--radius);padding:12px 16px;color:white;">
+          <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:8px;">📊 ${monthLabel(month)} &nbsp;${openAttendanceKey ? '● במשמרת' : '○ לא במשמרת'}</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);">
+            <div style="text-align:center;padding:0 6px;border-left:1px solid rgba(255,255,255,0.15);">
+              <div style="font-size:18px;font-weight:800;line-height:1.2;">${fmtDuration(totalMins)}</div>
+              <div style="font-size:10px;color:rgba(255,255,255,0.65);">שעות</div>
+            </div>
+            <div style="text-align:center;padding:0 6px;border-left:1px solid rgba(255,255,255,0.15);">
+              <div style="font-size:18px;font-weight:800;line-height:1.2;">${donData.length}</div>
+              <div style="font-size:10px;color:rgba(255,255,255,0.65);">תרומות</div>
+            </div>
+            <div style="text-align:center;padding:0 6px;">
+              <div style="font-size:18px;font-weight:800;line-height:1.2;color:var(--accent-light);">${fmtCurrency(donTotal)}</div>
+              <div style="font-size:10px;color:rgba(255,255,255,0.65);">סה"כ</div>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <div class="card">
-      <div class="card-title">📅 סיכום חודש ${monthLabel(month)}</div>
-      <div class="att-summary-grid">
-        <div class="att-cell"><div class="att-cell-num">${workDays}</div><div class="att-cell-lbl">ימי עבודה</div></div>
-        <div class="att-cell"><div class="att-cell-num">${fmtDuration(totalMins)}</div><div class="att-cell-lbl">שעות עבודה</div></div>
-        <div class="att-cell vacation"><div class="att-cell-num">${vacDays}</div><div class="att-cell-lbl">ימי חופשה</div></div>
-        <div class="att-cell sick"><div class="att-cell-num">${sickDays}</div><div class="att-cell-lbl">ימי מחלה</div></div>
-        <div class="att-cell holiday"><div class="att-cell-num">${holDays}</div><div class="att-cell-lbl">ימי חג</div></div>
+      <!-- בונוס + הוראות קבע -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="bonus-card">
+          <div class="bonus-card-title">🎁 בונוס תרומות החודש</div>
+          <div class="bonus-amount">${fmtCurrency(bonusEarned)}</div>
+          <div class="bonus-tier-label">${tiersReached > 0 ? 'רמה ' + tiersReached + ' · ' + tiersReached + '×' + fmtCurrency(BONUS_PER_TIER) : 'טרם הגעת לרמה הראשונה'}</div>
+          <div style="font-size:11px;color:var(--text-muted)">לרמה הבאה (${fmtCurrency((tiersReached+1)*BONUS_TIER_SIZE)}):</div>
+          ${buildProgressBar(amountInCurrentTier, BONUS_TIER_SIZE, 'accent')}
+          <div style="font-size:11px;color:var(--text-muted)">עוד ${fmtCurrency(amountToNextTier)}</div>
+          <div class="bonus-motivational">${getBonusMotivationalMsg(tiersReached, bonusPctToNext)}</div>
+        </div>
+        <div class="hork-card">
+          <div class="hork-card-title">🔁 הוראות קבע החודש</div>
+          <div class="hork-counts">
+            <div class="hork-current">${horkCount}</div>
+            ${horkTarget !== null ? '<div class="hork-target-lbl">/ ' + horkTarget + ' יעד</div>' : '<div class="hork-no-target">אין יעד מוגדר</div>'}
+          </div>
+          ${horkTarget !== null ? buildProgressBar(horkCount, horkTarget, 'success') : ''}
+          ${horkTarget !== null ? '<div class="bonus-motivational" style="background:rgba(76,175,128,0.1);color:#2E7D32">' + getHorkMotivationalMsg(horkPct) + '</div>' : ''}
+        </div>
       </div>
+
+      <!-- נוכחות חודשית -->
+      <div style="background:white;border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;">
+        <div style="font-size:12px;font-weight:700;color:var(--primary-dark);margin-bottom:8px;">📅 נוכחות – ${monthLabel(month)}</div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">
+          <div style="text-align:center;padding:8px 4px;border-radius:8px;border-top:3px solid var(--primary);box-shadow:var(--shadow);">
+            <div style="font-size:22px;font-weight:800;color:var(--primary-dark);">${workDays}</div>
+            <div style="font-size:11px;color:var(--text-muted);">ימי עבודה</div>
+          </div>
+          <div style="text-align:center;padding:8px 4px;border-radius:8px;border-top:3px solid var(--primary);box-shadow:var(--shadow);">
+            <div style="font-size:20px;font-weight:800;color:var(--primary-dark);">${fmtDuration(totalMins)}</div>
+            <div style="font-size:11px;color:var(--text-muted);">שעות עבודה</div>
+          </div>
+          <div style="text-align:center;padding:8px 4px;border-radius:8px;border-top:3px solid var(--accent);box-shadow:var(--shadow);">
+            <div style="font-size:22px;font-weight:800;color:var(--primary-dark);">${vacDays}</div>
+            <div style="font-size:11px;color:var(--text-muted);">ימי חופשה</div>
+          </div>
+          <div style="text-align:center;padding:8px 4px;border-radius:8px;border-top:3px solid var(--danger);box-shadow:var(--shadow);">
+            <div style="font-size:22px;font-weight:800;color:var(--primary-dark);">${sickDays}</div>
+            <div style="font-size:11px;color:var(--text-muted);">ימי מחלה</div>
+          </div>
+          <div style="text-align:center;padding:8px 4px;border-radius:8px;border-top:3px solid #42A5F5;box-shadow:var(--shadow);">
+            <div style="font-size:22px;font-weight:800;color:var(--primary-dark);">${holDays}</div>
+            <div style="font-size:11px;color:var(--text-muted);">ימי חג</div>
+          </div>
+        </div>
+      </div>
+
     </div>
   `);
 }
