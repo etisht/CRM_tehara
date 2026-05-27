@@ -349,6 +349,10 @@
   <div class="modal modal-wide">
     <div class="modal-title">💙 <span id="donation-modal-title">הוספת תרומה</span></div>
     <input type="hidden" id="donation-edit-id">
+    <div class="form-group" id="don-operator-row" style="display:none">
+      <label>טלפנית <span class="req">*</span></label>
+      <select class="form-control" id="don-operator"></select>
+    </div>
     <div class="form-group">
       <label>מספר תרומה <span class="req">*</span></label>
       <input class="form-control" type="text" id="don-number" placeholder="הזן מספר תרומה">
@@ -1368,6 +1372,12 @@ function openAddDonation() {
   document.getElementById('don-method').value = 'credit';
   document.getElementById('don-notes').value = '';
   populateCampaignDropdown('don-campaign');
+  if (userProfile.role === 'admin') {
+    document.getElementById('don-operator-row').style.display = 'block';
+    populateOperatorDropdown('don-operator');
+  } else {
+    document.getElementById('don-operator-row').style.display = 'none';
+  }
   openModal('modal-donation');
 }
 
@@ -1388,8 +1398,22 @@ function openEditDonation(id) {
     document.getElementById('don-method').value = r.paymentMethod||'credit';
     document.getElementById('don-notes').value = r.notes||'';
     populateCampaignDropdown('don-campaign', r.campaignId);
+    if (userProfile.role === 'admin') {
+      document.getElementById('don-operator-row').style.display = 'block';
+      populateOperatorDropdown('don-operator', r.operatorId);
+    } else {
+      document.getElementById('don-operator-row').style.display = 'none';
+    }
     openModal('modal-donation');
   });
+}
+
+function populateOperatorDropdown(selId, selectedId) {
+  const sel = document.getElementById(selId);
+  sel.innerHTML = '<option value="">-- בחר טלפנית --</option>' +
+    Object.entries(allOperators)
+      .filter(([,p]) => p.role === 'operator' && p.isActive !== false)
+      .map(([uid,p]) => `<option value="${uid}" ${uid === selectedId ? 'selected' : ''}>${esc(p.displayName)}</option>`).join('');
 }
 
 function populateCampaignDropdown(selId, selectedId) {
@@ -1417,6 +1441,16 @@ async function saveDonation() {
   const method = document.getElementById('don-method').value;
   const donorType = document.getElementById('don-donor-type').value;
 
+  // Resolve operator (admin can assign to another operator)
+  let opId = currentUser.uid;
+  let opName = userProfile.displayName;
+  if (userProfile.role === 'admin') {
+    const selOpId = document.getElementById('don-operator')?.value;
+    if (!selOpId) { showToast('נא לבחור טלפנית','error'); return; }
+    opId = selOpId;
+    opName = allOperators[selOpId]?.displayName || selOpId;
+  }
+
   if (!donationNumber || !donorName || !date || !payments || !amount || !campaignId) {
     showToast('נא למלא את כל שדות החובה','error'); return;
   }
@@ -1427,8 +1461,8 @@ async function saveDonation() {
 
   const record = {
     donationNumber,
-    operatorId: currentUser.uid,
-    operatorName: userProfile.displayName,
+    operatorId: opId,
+    operatorName: opName,
     donorName,
     donorPhone: document.getElementById('don-phone').value.trim(),
     donationDate: date,
