@@ -34,6 +34,12 @@
     .login-logo { width: 80px; height: 80px; background: linear-gradient(135deg, var(--primary), var(--accent)); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; font-size: 34px; }
     .login-title { font-size: 26px; font-weight: 800; color: var(--primary-dark); margin-bottom: 4px; }
     .login-sub { color: var(--text-muted); font-size: 14px; margin-bottom: 32px; }
+    .login-divider { display: flex; align-items: center; gap: 12px; margin: 20px 0; color: var(--text-muted); font-size: 13px; }
+    .login-divider::before, .login-divider::after { content: ''; flex: 1; height: 1px; background: #e5e7eb; }
+    .btn-google { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 12px 16px; border: 1.5px solid #dadce0; border-radius: 10px; background: #fff; color: #3c4043; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.2s, box-shadow 0.2s; font-family: inherit; }
+    .btn-google:hover:not(:disabled) { background: #f8f9fa; box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+    .btn-google:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-google svg { flex-shrink: 0; }
 
     /* FORMS */
     .form-group { margin-bottom: 16px; text-align: right; }
@@ -275,6 +281,11 @@
       <input class="form-control" type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
     </div>
     <button class="btn btn-primary btn-full" onclick="doLogin()" id="login-btn">כניסה למערכת</button>
+    <div class="login-divider"><span>או</span></div>
+    <button class="btn-google" onclick="doGoogleLogin()" id="google-btn">
+      <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      כניסה עם Google
+    </button>
   </div>
 </div>
 
@@ -593,6 +604,7 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+const googleProvider = new firebase.auth.GoogleAuthProvider();
 
 // ===== STATE =====
 // currentUser = { uid: dbKey, email, displayName, role, isActive, ... }
@@ -717,8 +729,10 @@ async function _createAuthUser(email, password) {
   return data.localId; // Firebase Auth UID
 }
 
-// Load DB profile by Firebase Auth UID (stored as authUid field)
-async function _loadUserProfile(authUid) {
+// Load DB profile by Firebase Auth UID (stored as authUid field).
+// Falls back to email lookup — handles Google SSO first-time sign-in.
+async function _loadUserProfile(authUid, email) {
+  // 1️⃣ Fast path: look up by authUid field
   const snap = await db.ref('users').orderByChild('authUid').equalTo(authUid).once('value');
   if (snap.val()) {
     const [uid, profile] = Object.entries(snap.val())[0];
@@ -726,6 +740,22 @@ async function _loadUserProfile(authUid) {
     currentUser = { uid, ...profileNoPw };
     userProfile = currentUser;
     return true;
+  }
+
+  // 2️⃣ Email fallback — for Google SSO or unlinked accounts
+  if (email) {
+    const allSnap = await db.ref('users').once('value');
+    const users = allSnap.val() || {};
+    for (const [uid, u] of Object.entries(users)) {
+      if ((u.email||'').toLowerCase() === email.toLowerCase()) {
+        // Link this DB profile to the Firebase Auth UID and clear any stored password
+        await db.ref('users/' + uid).update({ authUid, password: null });
+        const { password: _pw, ...profileNoPw } = { ...u, authUid };
+        currentUser = { uid, ...profileNoPw };
+        userProfile = currentUser;
+        return true;
+      }
+    }
   }
   return false;
 }
@@ -742,11 +772,19 @@ function _showLoginScreen() {
 firebase.auth().onAuthStateChanged(async (firebaseUser) => {
   if (firebaseUser) {
     try {
-      const found = await _loadUserProfile(firebaseUser.uid);
-      if (!found || currentUser.isActive === false) {
+      const found = await _loadUserProfile(firebaseUser.uid, firebaseUser.email);
+      if (!found) {
         await firebase.auth().signOut();
         _showLoginScreen();
-        if (!found) return;
+        showLoginError('חשבון Google זה אינו מורשה למערכת. פנה למנהל.');
+        // Reset Google button
+        const gb = document.getElementById('google-btn');
+        if (gb) { gb.disabled = false; gb.innerHTML = _GOOGLE_BTN_INNER; }
+        return;
+      }
+      if (currentUser.isActive === false) {
+        await firebase.auth().signOut();
+        _showLoginScreen();
         showLoginError('החשבון אינו פעיל. אנא פנה למנהל.');
         return;
       }
@@ -865,6 +903,28 @@ function doLogout() {
   if (sessionTimerInterval) { clearInterval(sessionTimerInterval); sessionTimerInterval = null; }
   if (window._clockInterval) { clearInterval(window._clockInterval); window._clockInterval = null; }
   firebase.auth().signOut(); // onAuthStateChanged → _showLoginScreen
+}
+
+const _GOOGLE_BTN_INNER = `<svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg> כניסה עם Google`;
+
+async function doGoogleLogin() {
+  const btn = document.getElementById('google-btn');
+  btn.disabled = true; btn.textContent = 'מתחבר...';
+  hideLoginError();
+  try {
+    await firebase.auth().signInWithPopup(googleProvider);
+    // onAuthStateChanged fires → _loadUserProfile (by authUid or email) → startApp
+    // If email not found in /users, onAuthStateChanged will sign out + show error below
+  } catch(e) {
+    btn.disabled = false; btn.innerHTML = _GOOGLE_BTN_INNER;
+    if (e.code === 'auth/popup-closed-by-user' ||
+        e.code === 'auth/cancelled-popup-request') return; // user cancelled — no error shown
+    if (e.code === 'auth/popup-blocked') {
+      showLoginError('הדפדפן חסם את חלון הכניסה. אפשר חלונות קופצים ונסה שוב.');
+    } else {
+      showLoginError('שגיאה בכניסה עם Google. נסה שוב.');
+    }
+  }
 }
 
 function showLoginError(msg) { const e=document.getElementById('login-error'); e.textContent=msg; e.style.display='block'; }
