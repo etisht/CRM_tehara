@@ -575,6 +575,7 @@
 
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 
@@ -698,26 +699,71 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 function openSidebar() { document.getElementById('sidebar').classList.add('open'); document.getElementById('sidebar-overlay').classList.add('open'); }
 function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sidebar-overlay').classList.remove('open'); }
 
-// ===== AUTH (Custom DB-based) =====
-// On page load: restore session from localStorage
-window.addEventListener('DOMContentLoaded', () => {
-  const saved = localStorage.getItem('crm_session');
-  if (saved) {
-    try {
-      currentUser = JSON.parse(saved);
-      userProfile = currentUser;
-      startApp();
-      return;
-    } catch(e) { localStorage.removeItem('crm_session'); }
+// ===== AUTH (Firebase Authentication) =====
+
+// Create a Firebase Auth user via REST API — does NOT switch the current session
+async function _createAuthUser(email, password) {
+  const url = `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${firebaseConfig.apiKey}`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, returnSecureToken: false })
+  });
+  const data = await resp.json();
+  if (!resp.ok) {
+    const code = data.error?.message || 'UNKNOWN';
+    throw Object.assign(new Error(code), { code });
   }
+  return data.localId; // Firebase Auth UID
+}
+
+// Load DB profile by Firebase Auth UID (stored as authUid field)
+async function _loadUserProfile(authUid) {
+  const snap = await db.ref('users').orderByChild('authUid').equalTo(authUid).once('value');
+  if (snap.val()) {
+    const [uid, profile] = Object.entries(snap.val())[0];
+    const { password: _pw, ...profileNoPw } = profile;
+    currentUser = { uid, ...profileNoPw };
+    userProfile = currentUser;
+    return true;
+  }
+  return false;
+}
+
+function _showLoginScreen() {
+  currentUser = null; userProfile = null;
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
+  document.getElementById('login-email').value = '';
+  document.getElementById('login-password').value = '';
+}
+
+// Firebase Auth state listener — replaces localStorage session entirely
+firebase.auth().onAuthStateChanged(async (firebaseUser) => {
+  if (firebaseUser) {
+    try {
+      const found = await _loadUserProfile(firebaseUser.uid);
+      if (!found || currentUser.isActive === false) {
+        await firebase.auth().signOut();
+        _showLoginScreen();
+        if (!found) return;
+        showLoginError('החשבון אינו פעיל. אנא פנה למנהל.');
+        return;
+      }
+      startApp();
+    } catch(e) {
+      await firebase.auth().signOut();
+      _showLoginScreen();
+    }
+  } else {
+    _showLoginScreen();
+  }
 });
 
 async function doLogin() {
   const email = document.getElementById('login-email').value.trim().toLowerCase();
-  const pass = document.getElementById('login-password').value;
-  const btn = document.getElementById('login-btn');
+  const pass  = document.getElementById('login-password').value;
+  const btn   = document.getElementById('login-btn');
   hideLoginError();
 
   // --- Rate limiting ---
@@ -726,11 +772,30 @@ async function doLogin() {
     showLoginError(`יותר מדי ניסיונות כניסה. נסה שוב בעוד ${remaining} שניות.`);
     return;
   }
-
   if (!email || !pass) { showLoginError('נא למלא אימייל וסיסמא'); return; }
   btn.disabled = true; btn.textContent = 'מתחבר...';
+
   try {
-    // Query all users, find by email
+    // 1️⃣ Try Firebase Auth (fast path — works after first migration)
+    try {
+      await firebase.auth().signInWithEmailAndPassword(email, pass);
+      _loginAttempts.count = 0;
+      return; // onAuthStateChanged → _loadUserProfile → startApp
+    } catch (authErr) {
+      const tryDbFallback =
+        authErr.code === 'auth/user-not-found'    ||  // never migrated
+        authErr.code === 'auth/invalid-credential' ||  // wrong pass or not found (new SDK)
+        authErr.code === 'auth/wrong-password';         // admin changed password in DB
+      if (!tryDbFallback) {
+        const msg = authErr.code === 'auth/too-many-requests'
+          ? 'יותר מדי ניסיונות. נסה שוב מאוחר יותר.'
+          : 'אימייל או סיסמא שגויים';
+        _failLogin(btn, msg);
+        return;
+      }
+    }
+
+    // 2️⃣ DB fallback — verify against stored hash (migration or admin-changed password)
     const snap = await db.ref('users').once('value');
     const users = snap.val() || {};
     let found = null;
@@ -738,62 +803,68 @@ async function doLogin() {
       if ((u.email||'').toLowerCase() === email) { found = { uid, ...u }; break; }
     }
 
-    // --- Password check with migration from plain-text → hash ---
     let authenticated = false;
     if (found) {
       const storedPass = found.password || '';
       if (isHashed(storedPass)) {
-        // Already hashed – compare hash
-        const inputHash = await hashPassword(pass);
-        authenticated = (inputHash === storedPass);
+        authenticated = (await hashPassword(pass)) === storedPass;
       } else {
-        // Plain-text (legacy) – compare directly, then migrate to hash
-        authenticated = (storedPass === pass);
-        if (authenticated) {
-          const hashed = await hashPassword(pass);
-          await db.ref('users/' + found.uid + '/password').set(hashed);
-          found.password = hashed; // update local cache
-        }
+        authenticated = storedPass === pass; // legacy plain-text
       }
     }
 
-    if (!found || !authenticated) {
-      _loginAttempts.count++;
-      if (_loginAttempts.count >= _MAX_LOGIN_ATTEMPTS) {
-        _loginAttempts.lockUntil = Date.now() + _LOGIN_LOCK_MS;
-        _loginAttempts.count = 0;
-        showLoginError('יותר מדי ניסיונות כניסה. החשבון נעול ל-5 דקות.');
-      } else {
-        showLoginError('אימייל או סיסמא שגויים');
-      }
+    if (!found || !authenticated) { _failLogin(btn, 'אימייל או סיסמא שגויים'); return; }
+    if (found.isActive === false) {
+      showLoginError('החשבון אינו פעיל. אנא פנה למנהל.');
       btn.disabled=false; btn.textContent='כניסה למערכת';
       return;
     }
-    if (found.isActive === false) { showLoginError('החשבון אינו פעיל. אנא פנה למנהל.'); btn.disabled=false; btn.textContent='כניסה למערכת'; return; }
 
-    _loginAttempts.count = 0; // reset on success
+    // 3️⃣ Migration: create Firebase Auth account with the ENTERED password
+    try {
+      const userCred = await firebase.auth().createUserWithEmailAndPassword(email, pass);
+      // Link the DB profile to the Firebase Auth UID and clear stored password
+      await db.ref('users/' + found.uid).update({ authUid: userCred.user.uid, password: null });
+      _loginAttempts.count = 0;
+      // onAuthStateChanged will fire → startApp
+    } catch (createErr) {
+      if (createErr.code === 'auth/email-already-in-use') {
+        // Firebase Auth account exists but password is out of sync (admin changed DB password).
+        // Graceful fallback: start app directly this session.
+        // Admin should delete the Firebase Auth account from Firebase Console to complete the reset.
+        console.warn('Firebase Auth email already in use — running without Auth this session. Admin: delete the Firebase Auth account from the console to sync.');
+        const { password: _pw, ...userNoPw } = found;
+        currentUser = userNoPw;
+        userProfile = currentUser;
+        _loginAttempts.count = 0;
+        startApp();
+      } else {
+        throw createErr;
+      }
+    }
 
-    // --- Never store password in session ---
-    const { password: _pw, ...userWithoutPass } = found;
-    currentUser = userWithoutPass;
-    userProfile = currentUser;
-    localStorage.setItem('crm_session', JSON.stringify(currentUser));
-    startApp();
   } catch(e) {
     showLoginError('שגיאה בהתחברות. נסה שוב.');
     btn.disabled = false; btn.textContent = 'כניסה למערכת';
   }
 }
 
+function _failLogin(btn, msg) {
+  _loginAttempts.count++;
+  if (_loginAttempts.count >= _MAX_LOGIN_ATTEMPTS) {
+    _loginAttempts.lockUntil = Date.now() + _LOGIN_LOCK_MS;
+    _loginAttempts.count = 0;
+    showLoginError('יותר מדי ניסיונות כניסה. החשבון נעול ל-5 דקות.');
+  } else {
+    showLoginError(msg);
+  }
+  btn.disabled=false; btn.textContent='כניסה למערכת';
+}
+
 function doLogout() {
   if (sessionTimerInterval) { clearInterval(sessionTimerInterval); sessionTimerInterval = null; }
   if (window._clockInterval) { clearInterval(window._clockInterval); window._clockInterval = null; }
-  localStorage.removeItem('crm_session');
-  currentUser = null; userProfile = null;
-  document.getElementById('login-screen').style.display = 'flex';
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('login-email').value = '';
-  document.getElementById('login-password').value = '';
+  firebase.auth().signOut(); // onAuthStateChanged → _showLoginScreen
 }
 
 function showLoginError(msg) { const e=document.getElementById('login-error'); e.textContent=msg; e.style.display='block'; }
@@ -2157,33 +2228,63 @@ async function saveUser() {
 
   try {
     if (editId) {
-      // Edit existing
+      // ── Edit existing ──
       const updates = { displayName: name, email, role };
-      if (pass) updates.password = await hashPassword(pass); // always hash
+      if (pass) {
+        if (editId === currentUser.uid) {
+          // Changing OWN password → update Firebase Auth directly
+          await firebase.auth().currentUser.updatePassword(pass);
+          // No need to store password in DB (Firebase Auth is the source of truth)
+        } else {
+          // Changing ANOTHER user's password:
+          // Store hash in DB and clear their authUid so the migration re-runs on next login.
+          // If their Firebase Auth account already exists, they may need one session without Auth.
+          // Admin tip: delete the user's Firebase Auth account from Firebase Console to fully reset.
+          updates.password = await hashPassword(pass);
+          updates.authUid  = null;
+        }
+      }
       await db.ref('users/'+editId).update(updates);
       Object.assign(allOperators[editId], updates);
-      // If editing self, update session (without password)
       if (editId === currentUser.uid) {
-        const { password: _pw, ...updatesNoPw } = updates;
-        Object.assign(currentUser, updatesNoPw);
-        localStorage.setItem('crm_session', JSON.stringify(currentUser));
+        const { password: _pw, authUid: _au, ...updatesClean } = updates;
+        Object.assign(currentUser, updatesClean);
         document.getElementById('sidebar-username').textContent = name;
       }
       showToast('✅ משתמש עודכן','success');
     } else {
-      // Create new – always store hashed password
-      const hashedPass = await hashPassword(pass);
-      const ref = await db.ref('users').push({
-        displayName: name, email, password: hashedPass, role,
+      // ── Create new ──
+      // First: create Firebase Auth account via REST API (doesn't affect current session)
+      let authUid = null;
+      try {
+        authUid = await _createAuthUser(email, pass);
+      } catch (authCreateErr) {
+        if (authCreateErr.code === 'EMAIL_EXISTS') {
+          showToast('אימייל זה כבר קיים ב-Firebase Auth','error'); return;
+        }
+        // Firebase Auth creation failed — fall back to DB-only (will migrate on first login)
+        console.warn('Firebase Auth user creation failed, falling back to DB-only:', authCreateErr);
+      }
+
+      const newProfile = {
+        displayName: name, email, role,
         isActive: true, createdAt: Date.now(), createdBy: currentUser.uid
-      });
-      allOperators[ref.key] = { displayName: name, email, password: hashedPass, role, isActive: true };
+      };
+      if (authUid) {
+        newProfile.authUid = authUid; // linked to Firebase Auth — no password stored
+      } else {
+        newProfile.password = await hashPassword(pass); // fallback until migration
+      }
+
+      const ref = await db.ref('users').push(newProfile);
+      allOperators[ref.key] = { ...newProfile };
       showToast('✅ משתמש נוצר בהצלחה','success');
     }
     closeModal('modal-user');
     renderAdminUsersPage();
   } catch(e) {
-    showToast('שגיאה בשמירה','error');
+    console.error(e);
+    showToast('שגיאה בשמירה: ' + (e.message || e), 'error');
   }
 }
 

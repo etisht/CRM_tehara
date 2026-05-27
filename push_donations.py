@@ -4,14 +4,8 @@ Push donation records to Firebase for operator Michal
 """
 
 import json
-import urllib.request
-import urllib.error
-import ssl
 import time
-
-ssl_ctx = ssl.create_default_context()  # uses system CAs – verifies Firebase cert
-
-FIREBASE_URL = "https://hanzaha-d558c-default-rtdb.europe-west1.firebasedatabase.app"
+from firebase_auth import firebase_post, get_auth_token, FIREBASE_URL
 OPERATOR_ID = "-Ot_Qf97WwP71atkHWui"
 OPERATOR_NAME = "יפית"
 
@@ -68,15 +62,11 @@ RAW_OLD = [
     ("1","פרחי אלינור",        "26.5.26", "545704072",    24, 50,    "הוראת קבע באשראי",            "בית שמש-אשלים",             "חידוש תרומות"),
 ]
 
-def push_record(record):
-    url = f"{FIREBASE_URL}/donations.json"
-    data = json.dumps(record, ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(url, data=data, method="POST",
-                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=15, context=ssl_ctx) as resp:
-        return json.loads(resp.read())
+def push_record(record, token):
+    return firebase_post("donations", record, token)
 
 def main():
+    token  = get_auth_token()
     now_ms = int(time.time() * 1000)
     ok, fail = 0, 0
 
@@ -109,7 +99,7 @@ def main():
         }
 
         try:
-            result = push_record(record)
+            result = push_record(record, token)
             print(f"  ✅ [{i:02d}] {donor_name:<25} → {result['name']}")
             ok += 1
         except Exception as e:

@@ -3,17 +3,15 @@
 Push attendance (shifts) to Firebase for operator Ruth
 """
 
-import json, ssl, urllib.request, time
+import json
 from datetime import datetime, timezone, timedelta
+from firebase_auth import firebase_post, get_auth_token
 
-FIREBASE_URL = "https://hanzaha-d558c-default-rtdb.europe-west1.firebasedatabase.app"
 OPERATOR_ID   = "-Ot__lq3wJPtP2R8hPiQ"
 OPERATOR_NAME = "רות"
 
 # Israel Daylight Time = UTC+3 (May)
 IDT = timezone(timedelta(hours=3))
-
-ssl_ctx = ssl.create_default_context()  # uses system CAs – verifies Firebase cert
 
 def to_ms(date_str, time_str):
     """'d/m/yy' + 'HH:MM'  →  Unix ms (Israel time)"""
@@ -22,13 +20,8 @@ def to_ms(date_str, time_str):
     dt = datetime(2000+int(y), int(m), int(d), int(h), int(mn), tzinfo=IDT)
     return int(dt.timestamp() * 1000)
 
-def push(record):
-    url  = f"{FIREBASE_URL}/attendance.json"
-    data = json.dumps(record, ensure_ascii=False).encode()
-    req  = urllib.request.Request(url, data=data, method="POST",
-                                   headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=15, context=ssl_ctx) as r:
-        return json.loads(r.read())["name"]
+def push(record, token):
+    return firebase_post("attendance", record, token)["name"]
 
 def make_record(date_str, clock_in_str, clock_out_str):
     ci = to_ms(date_str, clock_in_str)
@@ -65,6 +58,7 @@ SHIFTS = [
 ]
 
 def main():
+    token = get_auth_token()
     ok = 0
     for row in SHIFTS:
         date = row[0]
@@ -77,7 +71,7 @@ def main():
             mins = rec["durationMinutes"]
             h, m = divmod(mins, 60)
             try:
-                fid = push(rec)
+                fid = push(rec, token)
                 label = f"{ci}–{co} ({h}:{m:02d})"
                 print(f"  ✅ {date:<10} {label:<20} → {fid}")
                 ok += 1

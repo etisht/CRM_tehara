@@ -5,15 +5,13 @@ Only totalAmount is stored (no paymentsCount / amountPerPayment).
 All extra text goes into the notes field.
 """
 
-import json, ssl, urllib.request, time
+import json, time
+from firebase_auth import firebase_post, get_auth_token
 
-FIREBASE_URL  = "https://hanzaha-d558c-default-rtdb.europe-west1.firebasedatabase.app"
 OPERATOR_ID   = "-Ot_QRe-CVB6PFi3Gdgd"
 OPERATOR_NAME = "מיכל"
 CAMPAIGN_ID   = "-Ot_OrEn-KxuSN7JjKq5"
 CAMPAIGN_NAME = 'חידוש ביטול (לא של הטלפנית עצמה)'
-
-ssl_ctx = ssl.create_default_context()  # uses system CAs – verifies Firebase cert
 
 def parse_date(d):
     d = d.replace("/", ".")
@@ -25,13 +23,8 @@ def parse_date(d):
 def parse_amount(a):
     return float(str(a).replace(",", "").strip())
 
-def push(record):
-    url  = f"{FIREBASE_URL}/donations.json"
-    data = json.dumps(record, ensure_ascii=False).encode()
-    req  = urllib.request.Request(url, data=data, method="POST",
-                                   headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=15, context=ssl_ctx) as r:
-        return json.loads(r.read())["name"]
+def push(record, token):
+    return firebase_post("donations", record, token)["name"]
 
 # ---------- DATA ----------
 # (name, date, phone, total_amount, *note_parts)
@@ -77,6 +70,7 @@ RAW = [
 ]
 
 def main():
+    token  = get_auth_token()
     now_ms = int(time.time() * 1000)
     ok = fail = 0
 
@@ -106,7 +100,7 @@ def main():
         }
 
         try:
-            fid = push(record)
+            fid = push(record, token)
             print(f"  ✅ [{i:02d}] {name:<25} ₪{total:<8.0f} → {fid}")
             ok += 1
         except Exception as e:
