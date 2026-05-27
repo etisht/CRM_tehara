@@ -875,9 +875,12 @@ async function doLogin() {
       return; // onAuthStateChanged → _loadUserProfile → startApp
     } catch (authErr) {
       const tryDbFallback =
-        authErr.code === 'auth/user-not-found'    ||  // never migrated
-        authErr.code === 'auth/invalid-credential' ||  // wrong pass or not found (new SDK)
-        authErr.code === 'auth/wrong-password';         // admin changed password in DB
+        authErr.code === 'auth/user-not-found'          ||  // never migrated
+        authErr.code === 'auth/invalid-credential'      ||  // wrong pass / not found (new SDK)
+        authErr.code === 'auth/wrong-password'          ||  // admin changed password in DB
+        authErr.code === 'auth/configuration-not-found'||  // email/password provider not enabled
+        authErr.code === 'auth/operation-not-allowed'   ||  // sign-in method disabled
+        authErr.code === 'auth/unauthorized-domain';         // domain not in Firebase whitelist
       if (!tryDbFallback) {
         const msg = authErr.code === 'auth/too-many-requests'
           ? 'יותר מדי ניסיונות. נסה שוב מאוחר יותר.'
