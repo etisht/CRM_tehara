@@ -611,6 +611,48 @@ const googleProvider = new firebase.auth.GoogleAuthProvider();
 let currentUser = null;
 let userProfile = null;      // alias to currentUser for convenience
 let sessionTimerInterval = null;
+
+// ===== IDLE AUTO-LOGOUT =====
+const IDLE_TIMEOUT_MS  = 30 * 60 * 1000; // 30 minutes
+const IDLE_WARNING_MS  =  5 * 60 * 1000; // warn 5 min before
+let _idleLogoutTimer   = null;
+let _idleWarnTimer     = null;
+
+function _resetIdle() {
+  clearTimeout(_idleLogoutTimer);
+  clearTimeout(_idleWarnTimer);
+  if (!currentUser) return;
+  _idleWarnTimer = setTimeout(_showIdleWarning, IDLE_TIMEOUT_MS - IDLE_WARNING_MS);
+  _idleLogoutTimer = setTimeout(() => {
+    _hideIdleWarning();
+    doLogout();
+  }, IDLE_TIMEOUT_MS);
+}
+function _showIdleWarning() {
+  let banner = document.getElementById('idle-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'idle-banner';
+    banner.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:14px 24px;border-radius:12px;z-index:9999;display:flex;align-items:center;gap:16px;box-shadow:0 4px 20px rgba(0,0,0,0.4);font-size:15px;';
+    banner.innerHTML = '⏰ יצאת אוטומטית בעוד 5 דקות &nbsp;<button onclick="_resetIdle();_hideIdleWarning()" style="background:var(--primary);color:#fff;border:none;padding:6px 16px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;">המשך</button>';
+    document.body.appendChild(banner);
+  }
+  banner.style.display = 'flex';
+}
+function _hideIdleWarning() {
+  const banner = document.getElementById('idle-banner');
+  if (banner) banner.style.display = 'none';
+}
+const _IDLE_EVENTS = ['mousemove','keydown','click','touchstart','scroll'];
+function _startIdleTracking() {
+  _IDLE_EVENTS.forEach(e => document.addEventListener(e, _resetIdle, { passive: true }));
+  _resetIdle();
+}
+function _stopIdleTracking() {
+  clearTimeout(_idleLogoutTimer); clearTimeout(_idleWarnTimer);
+  _IDLE_EVENTS.forEach(e => document.removeEventListener(e, _resetIdle));
+  _hideIdleWarning();
+}
 let openAttendanceKey = null;
 let openAttendanceClockIn = null;
 let allOperators = {};       // uid -> profile (cached)
@@ -902,6 +944,7 @@ function _failLogin(btn, msg) {
 function doLogout() {
   if (sessionTimerInterval) { clearInterval(sessionTimerInterval); sessionTimerInterval = null; }
   if (window._clockInterval) { clearInterval(window._clockInterval); window._clockInterval = null; }
+  _stopIdleTracking();
   firebase.auth().signOut(); // onAuthStateChanged → _showLoginScreen
 }
 
@@ -943,6 +986,8 @@ async function startApp() {
 
   // Check for open attendance session
   await checkOpenSession();
+
+  _startIdleTracking();
 
   // Default page
   if (userProfile.role === 'admin') showPage('admin-dashboard');
@@ -2219,24 +2264,45 @@ async function renderAdminDashboard() {
 // ===== ADMIN USERS =====
 async function renderAdminUsersPage() {
   await loadAllOperators();
-  const rows = Object.entries(allOperators).map(([uid,p])=>`<tr>
+  const rows = Object.entries(allOperators).map(([uid,p])=>{
+    const authTag = p.authUid
+      ? `<span class="tag tag-success" title="מחובר ל-Firebase Auth">🔐 Auth</span>`
+      : `<span class="tag tag-warning" title="ממתין להתחברות ראשונה">⏳ ממתין</span>`;
+    return `<tr>
     <td>${esc(p.displayName||'')}</td>
     <td dir="ltr">${esc(p.email||'')}</td>
     <td><span class="tag ${p.role==='admin'?'tag-primary':'tag-success'}">${p.role==='admin'?'מנהל':'טלפנית'}</span></td>
+    <td>${authTag}</td>
     <td><span class="tag ${p.isActive===false?'tag-danger':'tag-success'}">${p.isActive===false?'לא פעיל':'פעיל'}</span></td>
     <td style="display:flex;gap:6px;flex-wrap:wrap;">
       <button class="btn btn-ghost btn-sm" onclick="openEditUser('${uid}')">✏️ עריכה</button>
       ${p.role === 'operator' ? `<button class="btn btn-accent btn-sm" onclick="openSetHorkTarget('${uid}')">🎯 יעדים</button>` : ''}
+      <button class="btn btn-ghost btn-sm" onclick="sendPasswordReset('${esc(p.email||'')}')">📧 איפוס</button>
       <button class="btn btn-danger btn-sm" onclick="deleteUser('${uid}')">🗑️ מחיקה</button>
     </td>
-  </tr>`).join('');
+  </tr>`;}).join('');
 
   setPage('ניהול משתמשים', `<button class="btn btn-primary btn-sm" onclick="openAddUser()">➕ משתמש חדש</button>`, `
     <div class="table-wrap"><table class="data-table">
-      <thead><tr><th>שם</th><th>אימייל</th><th>תפקיד</th><th>סטטוס</th><th>פעולות</th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">אין משתמשים</td></tr>'}</tbody>
+      <thead><tr><th>שם</th><th>אימייל</th><th>תפקיד</th><th>Auth</th><th>סטטוס</th><th>פעולות</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">אין משתמשים</td></tr>'}</tbody>
     </table></div>
   `);
+}
+
+async function sendPasswordReset(email) {
+  if (!email) { showToast('אין כתובת מייל למשתמש זה','error'); return; }
+  if (!confirm(`לשלוח מייל לאיפוס סיסמא לכתובת:\n${email}?`)) return;
+  try {
+    await firebase.auth().sendPasswordResetEmail(email);
+    showToast(`📧 מייל לאיפוס סיסמא נשלח ל-${email}`,'success');
+  } catch(e) {
+    if (e.code === 'auth/user-not-found') {
+      showToast('המשתמש טרם הגדיר Firebase Auth (ממתין להתחברות ראשונה)','error');
+    } else {
+      showToast('שגיאה בשליחת מייל: ' + e.message,'error');
+    }
+  }
 }
 
 function openAddUser() {
