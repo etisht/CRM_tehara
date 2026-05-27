@@ -1878,88 +1878,136 @@ async function deleteExpense(id) {
 async function renderAdminDashboard() {
   const month = currentMonth();
   const today = todayStr();
-  const [donSnap, expSnap, attSnap] = await Promise.all([
+
+  await loadAllOperators();
+  const operators = Object.entries(allOperators).filter(([,p])=>p.role==='operator'&&p.isActive!==false);
+
+  const basePromises = [
     db.ref('donations').orderByChild('month').equalTo(month).once('value'),
     db.ref('expenses').orderByChild('month').equalTo(month).once('value'),
-    db.ref('attendance').orderByChild('month').equalTo(month).once('value')
-  ]);
-  const donations = Object.values(donSnap.val()||{});
-  const expenses = Object.values(expSnap.val()||{});
-  const attRecords = Object.values(attSnap.val()||{});
-  const totalDon = donations.reduce((s,r)=>s+(r.totalAmount||0),0);
-  const totalExp = expenses.reduce((s,r)=>s+(r.amount||0),0);
-  const activeOps = new Set(donations.map(r=>r.operatorId)).size;
+    db.ref('attendance').orderByChild('month').equalTo(month).once('value'),
+  ];
+  const horkPromises = operators.map(([uid])=>db.ref(`settings/horkyTargets/${uid}/${month.replace('-','_')}`).once('value'));
+  const results = await Promise.all([...basePromises, ...horkPromises]);
+  const [donSnap, expSnap, attSnap] = results;
+  const horkSnaps = results.slice(3);
 
-  // ---- TODAY stats (admin - all operators) ----
-  const todayDons = donations.filter(r=>r.donationDate===today);
-  const todayDonTotal = todayDons.reduce((s,r)=>s+(r.totalAmount||0),0);
-  const todayAtt = attRecords.filter(r=>r.date===today);
-  const todayWorkMins = todayAtt.filter(r=>r.clockOut).reduce((s,r)=>s+(r.durationMinutes||0),0);
+  const donations  = Object.values(donSnap.val()||{});
+  const expenses   = Object.values(expSnap.val()||{});
+  const attRecords = Object.values(attSnap.val()||{});
+  const totalDon   = donations.reduce((s,r)=>s+(r.totalAmount||0),0);
+  const totalExp   = expenses.reduce((s,r)=>s+(r.amount||0),0);
+  const activeOps  = new Set(donations.map(r=>r.operatorId)).size;
+
+  // hork targets map
+  const horkTargets = {};
+  operators.forEach(([uid],i)=>{ horkTargets[uid] = horkSnaps[i].val()?.target ?? null; });
+
+  // TODAY
+  const todayDons      = donations.filter(r=>r.donationDate===today);
+  const todayDonTotal  = todayDons.reduce((s,r)=>s+(r.totalAmount||0),0);
+  const todayAtt       = attRecords.filter(r=>r.date===today);
+  const todayWorkMins  = todayAtt.filter(r=>r.clockOut).reduce((s,r)=>s+(r.durationMinutes||0),0);
   const todayActiveOps = new Set(todayAtt.map(r=>r.operatorId)).size;
 
-  // Top operator
+  // per-operator stats
   const byOp = {};
-  donations.forEach(r=>{ if(!byOp[r.operatorId]) byOp[r.operatorId]={name:r.operatorName,total:0}; byOp[r.operatorId].total+=r.totalAmount||0; });
-  const topOp = Object.values(byOp).sort((a,b)=>b.total-a.total)[0];
+  donations.forEach(r=>{
+    if(!byOp[r.operatorId]) byOp[r.operatorId]={total:0,count:0,horkCount:0};
+    byOp[r.operatorId].total += r.totalAmount||0;
+    byOp[r.operatorId].count++;
+    if((r.paymentsCount||0)>6) byOp[r.operatorId].horkCount++;
+  });
+
+  // operator cards sorted by total donations desc
+  const opCards = operators
+    .map(([uid,p])=>({ uid, name:p.displayName||'', ...(byOp[uid]||{total:0,count:0,horkCount:0}), horkTarget:horkTargets[uid] }))
+    .sort((a,b)=>b.total-a.total)
+    .map(op=>{
+      const horkPct = op.horkTarget > 0 ? Math.min(100,Math.round((op.horkCount/op.horkTarget)*100)) : 0;
+      const medal   = op === operators.map(([uid,p])=>({ uid, name:p.displayName||'', ...(byOp[uid]||{total:0,count:0,horkCount:0}), horkTarget:horkTargets[uid] })).sort((a,b)=>b.total-a.total)[0] ? '🥇 ' : '';
+      return `
+        <div style="background:white;border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;border-top:3px solid var(--primary);">
+          <div style="font-size:13px;font-weight:700;color:var(--primary-dark);margin-bottom:8px;">${medal}${esc(op.name)}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px;">
+            <div style="text-align:center;background:#F8F4FF;border-radius:6px;padding:6px 4px;">
+              <div style="font-size:20px;font-weight:800;color:var(--success);">${op.count}</div>
+              <div style="font-size:10px;color:var(--text-muted);">תרומות</div>
+            </div>
+            <div style="text-align:center;background:#FFF8E7;border-radius:6px;padding:6px 4px;">
+              <div style="font-size:14px;font-weight:800;color:var(--accent);">${fmtCurrency(op.total)}</div>
+              <div style="font-size:10px;color:var(--text-muted);">סה"כ</div>
+            </div>
+          </div>
+          ${op.horkTarget !== null
+            ? `<div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;">🔁 ה"ק: ${op.horkCount} / ${op.horkTarget} יעד</div>${buildProgressBar(op.horkCount,op.horkTarget,'success')}`
+            : `<div style="font-size:10px;color:var(--text-muted);font-style:italic;">אין יעד ה"ק</div>`}
+        </div>`;
+    }).join('');
 
   setPage('דשבורד מנהל', '', `
-    <div class="section-header"><h2>📊 דשבורד – ${monthLabel(month)}</h2></div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
 
-    <div class="today-widget">
-      <div class="today-widget-title">📅 סיכום היום – ${fmtDateStr(today)}</div>
-      <div class="today-stats-grid">
-        <div class="today-stat">
-          <div class="today-stat-icon">⏱️</div>
-          <div class="today-stat-num">${fmtDuration(todayWorkMins)}</div>
-          <div class="today-stat-lbl">שעות עבודה מצטברות<br>של כל הטלפניות היום</div>
-        </div>
-        <div class="today-stat">
-          <div class="today-stat-icon">💙</div>
-          <div class="today-stat-num">${todayDons.length}</div>
-          <div class="today-stat-lbl">תרומות חדשות שנוספו היום</div>
-        </div>
-        <div class="today-stat">
-          <div class="today-stat-icon">💰</div>
-          <div class="today-stat-num accent">${fmtCurrency(todayDonTotal)}</div>
-          <div class="today-stat-lbl">סכום שהותרם היום</div>
+      <!-- כותרת + כפתורי פעולה -->
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+        <h2 style="margin:0;font-size:20px;font-weight:800;color:var(--primary-dark);">📊 דשבורד – ${monthLabel(month)}</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" onclick="showPage('admin-donations')">💙 תרומות</button>
+          <button class="btn btn-accent btn-sm" onclick="showPage('admin-reports')">📈 דוחות</button>
+          <button class="btn btn-ghost btn-sm" onclick="showPage('admin-attendance')">🕐 נוכחות</button>
+          <button class="btn btn-ghost btn-sm" onclick="showPage('admin-expenses')">💸 הוצאות</button>
         </div>
       </div>
-    </div>
 
-    <div class="kpi-grid">
-      <div class="kpi-chip">
-        <div class="kpi-icon">💙</div>
-        <div class="kpi-num">${donations.length}</div>
-        <div class="kpi-label">תרומות החודש</div>
+      <!-- סיכום היום -->
+      <div style="background:linear-gradient(135deg,var(--primary-dark),var(--primary));border-radius:var(--radius);padding:14px 18px;color:white;">
+        <div style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.75);margin-bottom:10px;">📅 סיכום היום – ${fmtDateStr(today)}</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);">
+          <div style="text-align:center;padding:0 8px;border-left:1px solid rgba(255,255,255,0.15);">
+            <div style="font-size:20px;font-weight:800;line-height:1.2;">${todayActiveOps}</div>
+            <div style="font-size:10px;color:rgba(255,255,255,0.65);">טלפניות פעילות</div>
+          </div>
+          <div style="text-align:center;padding:0 8px;border-left:1px solid rgba(255,255,255,0.15);">
+            <div style="font-size:20px;font-weight:800;line-height:1.2;">${fmtDuration(todayWorkMins)}</div>
+            <div style="font-size:10px;color:rgba(255,255,255,0.65);">שעות עבודה</div>
+          </div>
+          <div style="text-align:center;padding:0 8px;border-left:1px solid rgba(255,255,255,0.15);">
+            <div style="font-size:20px;font-weight:800;line-height:1.2;">${todayDons.length}</div>
+            <div style="font-size:10px;color:rgba(255,255,255,0.65);">תרומות היום</div>
+          </div>
+          <div style="text-align:center;padding:0 8px;">
+            <div style="font-size:20px;font-weight:800;line-height:1.2;color:var(--accent-light);">${fmtCurrency(todayDonTotal)}</div>
+            <div style="font-size:10px;color:rgba(255,255,255,0.65);">סכום היום</div>
+          </div>
+        </div>
       </div>
-      <div class="kpi-chip accent">
-        <div class="kpi-icon">💰</div>
-        <div class="kpi-num">${fmtCurrency(totalDon)}</div>
-        <div class="kpi-label">סה"כ תרומות</div>
+
+      <!-- KPI החודש -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+        <div style="background:white;border-radius:var(--radius);box-shadow:var(--shadow);padding:10px;text-align:center;border-top:3px solid var(--primary);">
+          <div style="font-size:22px;font-weight:800;color:var(--primary-dark);">${donations.length}</div>
+          <div style="font-size:11px;color:var(--text-muted);">💙 תרומות החודש</div>
+        </div>
+        <div style="background:white;border-radius:var(--radius);box-shadow:var(--shadow);padding:10px;text-align:center;border-top:3px solid var(--accent);">
+          <div style="font-size:18px;font-weight:800;color:var(--accent);">${fmtCurrency(totalDon)}</div>
+          <div style="font-size:11px;color:var(--text-muted);">💰 סה"כ תרומות</div>
+        </div>
+        <div style="background:white;border-radius:var(--radius);box-shadow:var(--shadow);padding:10px;text-align:center;border-top:3px solid var(--danger);">
+          <div style="font-size:18px;font-weight:800;color:var(--danger);">${fmtCurrency(totalExp)}</div>
+          <div style="font-size:11px;color:var(--text-muted);">💸 הוצאות</div>
+        </div>
+        <div style="background:white;border-radius:var(--radius);box-shadow:var(--shadow);padding:10px;text-align:center;border-top:3px solid var(--success);">
+          <div style="font-size:22px;font-weight:800;color:var(--success);">${activeOps}</div>
+          <div style="font-size:11px;color:var(--text-muted);">👥 טלפניות פעילות</div>
+        </div>
       </div>
-      <div class="kpi-chip danger">
-        <div class="kpi-icon">💸</div>
-        <div class="kpi-num">${fmtCurrency(totalExp)}</div>
-        <div class="kpi-label">סה"כ הוצאות</div>
+
+      <!-- כרטיסי טלפניות -->
+      <div style="font-size:12px;font-weight:700;color:var(--primary-dark);">👩‍💼 טלפניות – ${monthLabel(month)}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;">
+        ${opCards || '<div style="color:var(--text-muted);font-size:13px;">אין טלפניות פעילות</div>'}
       </div>
-      <div class="kpi-chip success">
-        <div class="kpi-icon">👥</div>
-        <div class="kpi-num">${activeOps}</div>
-        <div class="kpi-label">טלפניות פעילות החודש</div>
-      </div>
-    </div>
-    ${topOp ? `<div class="card"><div class="card-title">🏆 טלפנית מובילה החודש</div>
-      <div style="font-size:20px;font-weight:800;color:var(--primary-dark)">${esc(topOp.name)}</div>
-      <div style="color:var(--text-muted);margin-top:4px">סה"כ תרומות: <strong style="color:var(--accent)">${fmtCurrency(topOp.total)}</strong></div>
-    </div>` : ''}
-    <div class="card">
-      <div class="card-title">⚡ פעולות מהירות</div>
-      <div style="display:flex;gap:12px;flex-wrap:wrap;">
-        <button class="btn btn-primary btn-sm" onclick="showPage('admin-donations')">💙 כל התרומות</button>
-        <button class="btn btn-accent btn-sm" onclick="showPage('admin-reports')">📈 דוחות</button>
-        <button class="btn btn-ghost btn-sm" onclick="showPage('admin-attendance')">🕐 נוכחות</button>
-        <button class="btn btn-ghost btn-sm" onclick="showPage('admin-expenses')">💸 הוצאות</button>
-      </div>
+
     </div>
   `);
 }
