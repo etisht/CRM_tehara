@@ -1075,7 +1075,18 @@ function showPage(page) {
     'admin-users': renderAdminUsersPage,
     'admin-settings': renderAdminSettingsPage,
   };
-  if (map[page]) map[page]();
+  if (map[page]) {
+    const result = map[page]();
+    if (result && typeof result.catch === 'function') {
+      result.catch(e => {
+        console.error('Page render error:', e);
+        const msg = e.message?.includes('permission_denied')
+          ? 'אין הרשאה לגשת לנתונים. בדוק את Firebase Security Rules.'
+          : 'שגיאה בטעינת הדף. נסה לרענן.';
+        setPage('שגיאה בטעינה', '', `<div style="padding:32px;text-align:center;color:var(--danger)">⚠️ ${msg}</div>`);
+      });
+    }
+  }
 }
 
 function setPage(title, actionsHTML, contentHTML) {
@@ -2140,18 +2151,19 @@ async function renderAdminDashboard() {
   await loadAllOperators();
   const operators = Object.entries(allOperators).filter(([,p])=>p.role==='operator'&&p.isActive!==false);
 
-  const basePromises = [
-    db.ref('donations').orderByChild('month').equalTo(month).once('value'),
-    db.ref('expenses').orderByChild('month').equalTo(month).once('value'),
-    db.ref('attendance').orderByChild('month').equalTo(month).once('value'),
-  ];
   const horkPromises = operators.map(([uid])=>db.ref(`settings/horkyTargets/${uid}/${month.replace('-','_')}`).once('value'));
-  const results = await Promise.all([...basePromises, ...horkPromises]);
-  const [donSnap, expSnap, attSnap] = results;
-  const horkSnaps = results.slice(3);
+  const [donSnap, attSnap, ...horkSnaps] = await Promise.all([
+    db.ref('donations').orderByChild('month').equalTo(month).once('value'),
+    db.ref('attendance').orderByChild('month').equalTo(month).once('value'),
+    ...horkPromises,
+  ]);
+
+  // expenses is loaded separately so a permission error doesn't break the whole dashboard
+  let expSnap = null;
+  try { expSnap = await db.ref('expenses').orderByChild('month').equalTo(month).once('value'); } catch(e) { console.warn('expenses read failed:', e.message); }
 
   const donations  = Object.values(donSnap.val()||{});
-  const expenses   = Object.values(expSnap.val()||{});
+  const expenses   = Object.values(expSnap?.val()||{});
   const attRecords = Object.values(attSnap.val()||{});
   const totalDon   = donations.reduce((s,r)=>s+(r.totalAmount||0),0);
   const totalExp   = expenses.reduce((s,r)=>s+(r.amount||0),0);
