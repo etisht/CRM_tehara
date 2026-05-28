@@ -2045,6 +2045,18 @@ async function loadReports() {
   const methodTotals = {credit:0,transfer:0,check:0,cash:0};
   allDonations.forEach(r => { const m=r.paymentMethod||'credit'; methodTotals[m]=(methodTotals[m]||0)+(r.totalAmount||0); });
 
+  // ---- campaign breakdown ----
+  const campTotals = {};
+  const campByMonth = {};
+  months.forEach(m => { campByMonth[m] = {}; });
+  allDonations.forEach(r => {
+    const c = r.campaignName||'ללא קמפיין';
+    campTotals[c] = (campTotals[c]||0) + (r.totalAmount||0);
+    if (campByMonth[r.month]) campByMonth[r.month][c] = (campByMonth[r.month][c]||0) + (r.totalAmount||0);
+  });
+  const campNames = Object.entries(campTotals).sort((a,b)=>b[1]-a[1]).map(([k])=>k);
+  const CAMP_PALETTE = ['#6B4C8B','#1976D2','#2E7D32','#C9A84C','#E53935','#00838F','#6D4C41','#546E7A','#AD1457','#558B2F'];
+
   // ---- new vs returning per month ----
   const newByMonth = {}, retByMonth = {};
   months.forEach(m => { newByMonth[m]=0; retByMonth[m]=0; });
@@ -2113,7 +2125,7 @@ async function loadReports() {
     </div>
 
     <!-- Row 3: new vs returning -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
       <div class="card" style="padding:16px">
         <div class="chart-title">🆕 תרומות חדשים vs. חוזרים – לפי חודש</div>
         <div style="position:relative;height:220px"><canvas id="rch-newret"></canvas></div>
@@ -2121,6 +2133,18 @@ async function loadReports() {
       <div class="card" style="padding:16px">
         <div class="chart-title">👥 סיכום לפי טלפנית</div>
         <div style="position:relative;height:220px"><canvas id="rch-operators"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Row 4: campaign charts -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+      <div class="card" style="padding:16px">
+        <div class="chart-title">📢 התפלגות לפי קמפיין – עוגה</div>
+        <div style="position:relative;height:260px"><canvas id="rch-camp-pie"></canvas></div>
+      </div>
+      <div class="card" style="padding:16px">
+        <div class="chart-title">📢 התפלגות לפי קמפיין – לפי חודש</div>
+        <div style="position:relative;height:260px"><canvas id="rch-camp-bar"></canvas></div>
       </div>
     </div>
 
@@ -2199,6 +2223,30 @@ async function loadReports() {
   }, options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y',
     plugins:{ legend:{position:'top'} },
     scales:{ x:{ stacked:true, ticks:{ callback:v=>fmtCurrency(v) } }, y:{ stacked:true } } } });
+
+  // 7. Campaign pie
+  if (campNames.length) {
+    _mkChart('rch-camp-pie', { type:'doughnut', data:{
+      labels: campNames,
+      datasets:[{ data: campNames.map(c=>campTotals[c]), backgroundColor: campNames.map((_,i)=>CAMP_PALETTE[i%CAMP_PALETTE.length]+'CC'), borderWidth:2 }]
+    }, options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{position:'right'}, tooltip:{ callbacks:{ label:ctx=>`${ctx.label}: ${fmtCurrency(ctx.raw)} (${totalIncome>0?((ctx.raw/totalIncome)*100).toFixed(1):0}%)` } } } } });
+  }
+
+  // 8. Campaign stacked bar by month
+  if (campNames.length) {
+    _mkChart('rch-camp-bar', { type:'bar', data:{
+      labels: mlabels,
+      datasets: campNames.map((c,i)=>({
+        label: c,
+        data:  months.map(m=>campByMonth[m][c]||0),
+        backgroundColor: CAMP_PALETTE[i%CAMP_PALETTE.length]+'BB',
+        borderRadius: 3,
+      }))
+    }, options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y',
+      plugins:{ legend:{position:'top'} },
+      scales:{ x:{ stacked:true, ticks:{ callback:v=>fmtCurrency(v) } }, y:{ stacked:true } } } });
+  }
 
   // 6. By operator (horizontal bar)
   const byOpArr = Object.entries(
