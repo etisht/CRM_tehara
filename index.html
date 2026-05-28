@@ -1063,6 +1063,7 @@ function buildNav() {
     html += navItem('admin-attendance','🕐','ניהול נוכחות');
     html += navItem('admin-donations','💙','כל התרומות');
     html += navItem('admin-reports','📈','דוחות');
+    html += navItem('admin-commissions','💰','עמלות');
     html += navItem('admin-expenses','💸','הוצאות מוקד');
     html += `<div class="nav-section-title">מערכת</div>`;
     html += navItem('admin-users','👥','ניהול משתמשים');
@@ -1089,6 +1090,7 @@ function showPage(page) {
     'admin-attendance': renderAdminAttendancePage,
     'admin-donations': renderAdminDonationsPage,
     'admin-reports': renderAdminReportsPage,
+    'admin-commissions': renderAdminCommissionsPage,
     'admin-expenses': renderAdminExpensesPage,
     'admin-users': renderAdminUsersPage,
     'admin-settings': renderAdminSettingsPage,
@@ -1963,10 +1965,24 @@ async function saveDonation() {
   };
 
   if (editId) {
+    // For edits: preserve existing reward fields (managed separately)
+    const existSnap = await db.ref('donations/'+editId).once('value');
+    const exist = existSnap.val() || {};
+    if (exist.rewardMonthLocked || exist.rewardPaid) {
+      // locked – keep all reward fields as-is, only update core fields
+      delete record.rewardMonth;
+    } else if (payments === 1 || donorType === 'shimur') {
+      // single-payment or shimur: sync rewardMonth with the donation month
+      record.rewardMonth = month;
+    }
     await db.ref('donations/'+editId).update(record);
     showToast('✅ תרומה עודכנה','success');
   } else {
     record.createdAt = Date.now();
+    // Set rewardMonth immediately for single-payment and shimur donations
+    if (payments === 1 || donorType === 'shimur') {
+      record.rewardMonth = month;
+    }
     await db.ref('donations').push(record);
     showToast('✅ תרומה נשמרה','success');
   }
@@ -2982,6 +2998,524 @@ async function saveHorkTarget() {
   });
   closeModal('modal-hork-target');
   showToast(`✅ יעד נשמר עבור ${allOperators[uid]?.displayName||uid} – ${monthLabel(month)}`, 'success');
+}
+
+// ===== ADMIN COMMISSIONS =====
+
+function _addMonths(monthStr, n) {
+  const d = new Date(monthStr + '-01');
+  d.setMonth(d.getMonth() + n);
+  return d.toISOString().slice(0, 7);
+}
+function _commRate(donorType) { return donorType === 'new' ? 0.05 : 0.025; }
+function _commRateLabel(donorType) { return donorType === 'new' ? '5%' : '2.5%'; }
+function _commAmt(r) { return (r.totalAmount || 0) * _commRate(r.donorType); }
+
+async function renderAdminCommissionsPage() {
+  setPage('עמלות טלפניות', '', `
+    <style>
+      .comm-tabs{display:flex;gap:6px;padding:16px 16px 0;border-bottom:2px solid var(--border,#e0d6f0);margin-bottom:16px}
+      .comm-tab{padding:8px 18px;border-radius:8px 8px 0 0;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted,#888);border-bottom:3px solid transparent;margin-bottom:-2px}
+      .comm-tab.active{color:var(--primary);border-bottom-color:var(--primary);background:var(--bg,#faf8ff)}
+      .comm-tab:hover{color:var(--primary)}
+      .comm-section{padding:16px}
+      .reward-badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:12px;font-weight:600}
+      .reward-paid{background:#E8F5E9;color:#2E7D32}
+      .reward-pending{background:#FFF8E1;color:#E65100}
+      .reward-empty{background:#F3E5F5;color:#6A1B9A}
+    </style>
+    <div class="comm-tabs">
+      <button class="comm-tab active" id="ctab-report" onclick="showCommTab('report')">📊 דוח עמלות</button>
+      <button class="comm-tab" id="ctab-import" onclick="showCommTab('import')">📂 ייבוא גביה</button>
+      <button class="comm-tab" id="ctab-approve" onclick="showCommTab('approve')">✅ אישור עמלות</button>
+    </div>
+    <div id="ctab-content"></div>
+  `);
+  showCommTab('report');
+}
+
+function showCommTab(tab) {
+  document.querySelectorAll('.comm-tab').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('ctab-' + tab);
+  if (btn) btn.classList.add('active');
+  if (tab === 'report') renderCommissionReport();
+  else if (tab === 'import') renderBillingImport();
+  else renderCommissionApproval();
+}
+
+// ---- TAB 1: COMMISSION REPORT ----
+function renderCommissionReport() {
+  const el = document.getElementById('ctab-content');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="comm-section">
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
+        <label style="font-weight:600">חודש:</label>
+        <input type="month" id="comm-report-month" value="${currentMonth()}" style="padding:6px 10px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:14px">
+        <button class="btn btn-primary btn-sm" onclick="loadCommissionReport()">הצג</button>
+      </div>
+      <div id="comm-report-table"></div>
+      <div id="comm-report-detail" style="margin-top:20px"></div>
+    </div>`;
+  loadCommissionReport();
+}
+
+let _commAllDonations = [];
+
+async function loadCommissionReport() {
+  const month = document.getElementById('comm-report-month')?.value;
+  if (!month) return;
+  const tableEl = document.getElementById('comm-report-table');
+  if (!tableEl) return;
+  tableEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">⏳ טוען...</div>';
+  document.getElementById('comm-report-detail').innerHTML = '';
+
+  const snap = await db.ref('donations').once('value');
+  _commAllDonations = [];
+  snap.forEach(c => { const r = c.val(); r._id = c.key; _commAllDonations.push(r); });
+
+  const relevant = _commAllDonations.filter(r => r.rewardMonth === month);
+
+  if (!relevant.length) {
+    tableEl.innerHTML = `<div class="empty-state"><div class="empty-icon">💰</div><h3>אין עמלות ל-${monthLabel(month)}</h3><p>ייבא דוח גביה או הוסף תרומות חד-פעמיות בחודש זה</p></div>`;
+    return;
+  }
+
+  const byOp = {};
+  relevant.forEach(r => {
+    if (!byOp[r.operatorId]) byOp[r.operatorId] = { name: r.operatorName || r.operatorId, donations: [] };
+    byOp[r.operatorId].donations.push(r);
+  });
+
+  let totalComm = 0;
+  let rows = '';
+  Object.entries(byOp).sort((a,b) => a[1].name.localeCompare(b[1].name, 'he')).forEach(([opId, op]) => {
+    const newD  = op.donations.filter(r => r.donorType === 'new');
+    const retD  = op.donations.filter(r => r.donorType !== 'new');
+    const newTotal = newD.reduce((s,r) => s+(r.totalAmount||0),0);
+    const retTotal = retD.reduce((s,r) => s+(r.totalAmount||0),0);
+    const newComm  = newTotal * 0.05;
+    const retComm  = retTotal * 0.025;
+    const opTotal  = newComm + retComm;
+    totalComm += opTotal;
+    const allPaid = op.donations.every(r => r.rewardPaid);
+    const badge = allPaid
+      ? `<span class="reward-badge reward-paid">✅ שולם</span>`
+      : `<span class="reward-badge reward-pending">⏳ ממתין</span>`;
+    rows += `<tr style="cursor:pointer" onclick="showCommissionDetail('${opId}','${month}')">
+      <td><strong>${esc(op.name)}</strong></td>
+      <td>${newD.length}</td>
+      <td>${fmtCurrency(newTotal)}</td>
+      <td style="color:var(--success);font-weight:600">${fmtCurrency(newComm)}</td>
+      <td>${retD.length}</td>
+      <td>${fmtCurrency(retTotal)}</td>
+      <td style="color:var(--accent);font-weight:600">${fmtCurrency(retComm)}</td>
+      <td style="font-weight:700;font-size:1.05em">${fmtCurrency(opTotal)}</td>
+      <td>${badge}</td>
+    </tr>`;
+  });
+
+  tableEl.innerHTML = `
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead><tr>
+          <th>טלפנית</th>
+          <th>חדש – מס'</th><th>חדש – סכום</th><th>עמלה 5%</th>
+          <th>חוזר/שימור – מס'</th><th>חוזר/שימור – סכום</th><th>עמלה 2.5%</th>
+          <th>סה"כ עמלה</th><th>סטטוס</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr style="font-weight:700;background:var(--bg)">
+          <td colspan="7">סה"כ כל הטלפניות</td>
+          <td>${fmtCurrency(totalComm)}</td><td></td>
+        </tr></tfoot>
+      </table>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-top:8px">לחץ על שורת טלפנית לפירוט</p>`;
+}
+
+async function showCommissionDetail(opId, month) {
+  const detailEl = document.getElementById('comm-report-detail');
+  if (!detailEl) return;
+  const donations = _commAllDonations.filter(r => r.operatorId === opId && r.rewardMonth === month);
+  if (!donations.length) { detailEl.innerHTML = ''; return; }
+  const opName = donations[0].operatorName || opId;
+
+  let rows = '';
+  donations.sort((a,b) => (a.donationDate||'').localeCompare(b.donationDate||'')).forEach(r => {
+    const comm = _commAmt(r);
+    const typeLabel = r.donorType === 'new' ? '<span class="donor-new">חדש</span>' : r.donorType === 'shimur' ? '<span class="donor-shimur">שימור</span>' : '<span class="donor-returning">חוזר</span>';
+    const statusBadge = r.rewardPaid
+      ? `<span class="reward-badge reward-paid">✅ שולם</span>`
+      : `<span class="reward-badge reward-pending">⏳ ממתין</span>`;
+    rows += `<tr>
+      <td>${r.donationDate||''}</td>
+      <td>${esc(r.donorName||'')}</td>
+      <td>${typeLabel}</td>
+      <td>${fmtCurrency(r.totalAmount||0)}</td>
+      <td>${_commRateLabel(r.donorType)}</td>
+      <td style="font-weight:600">${fmtCurrency(comm)}</td>
+      <td>${statusBadge}</td>
+    </tr>`;
+  });
+
+  const totalComm = donations.reduce((s,r) => s+_commAmt(r), 0);
+  detailEl.innerHTML = `
+    <div style="background:var(--bg,#faf8ff);border:1px solid var(--border,#e0d6f0);border-radius:12px;padding:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3 style="margin:0">פירוט עמלות – ${esc(opName)} – ${monthLabel(month)}</h3>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('comm-report-detail').innerHTML=''">✕ סגור</button>
+      </div>
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead><tr><th>תאריך</th><th>תורם</th><th>סוג</th><th>סכום תרומה</th><th>%</th><th>עמלה</th><th>סטטוס</th></tr></thead>
+          <tbody>${rows}</tbody>
+          <tfoot><tr style="font-weight:700">
+            <td colspan="5">סה"כ עמלה</td>
+            <td>${fmtCurrency(totalComm)}</td><td></td>
+          </tr></tfoot>
+        </table>
+      </div>
+    </div>`;
+  detailEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ---- TAB 2: BILLING IMPORT ----
+let _billingRows = [], _billingHeaders = [];
+
+function renderBillingImport() {
+  const el = document.getElementById('ctab-content');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="comm-section">
+      <h3 style="margin-top:0">ייבוא דוח גביה</h3>
+      <p style="color:var(--muted);font-size:14px">העלה קובץ Excel או CSV מהמערכת הגבייה. המערכת תתאים את הנתונים לתרומות ותעדכן את חודשי העמלה.</p>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px">
+        <input type="file" id="billing-file-input" accept=".xlsx,.xls,.csv" onchange="onBillingFileChange(this)" style="display:none">
+        <button class="btn btn-primary" onclick="document.getElementById('billing-file-input').click()">📂 בחר קובץ</button>
+        <span id="billing-file-name" style="color:var(--muted);font-size:13px">לא נבחר קובץ</span>
+      </div>
+      <div id="billing-mapper" style="display:none">
+        <div style="background:var(--bg,#faf8ff);border:1px solid var(--border,#e0d6f0);border-radius:12px;padding:16px;margin-bottom:16px">
+          <h4 style="margin-top:0">⚙️ מיפוי עמודות</h4>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
+              <strong>עמודת מספר תרומה <span style="color:var(--danger)">*</span></strong>
+              <select id="col-donation-num" style="padding:6px;border-radius:6px;border:1px solid var(--border,#ddd)"></select>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
+              <strong>מצב קובץ <span style="color:var(--danger)">*</span></strong>
+              <select id="col-mode" onchange="togglePaymentColMode()" style="padding:6px;border-radius:6px;border:1px solid var(--border,#ddd)">
+                <option value="per-payment">שורה לכל תשלום (נספור אוטומטית)</option>
+                <option value="per-donation">שורה לכל תרומה + עמודת כמות תשלומים</option>
+              </select>
+            </label>
+            <label id="col-payment-count-wrap" style="display:none;flex-direction:column;gap:4px;font-size:13px">
+              <strong>עמודת כמות תשלומים <span style="color:var(--danger)">*</span></strong>
+              <select id="col-payment-count" style="padding:6px;border-radius:6px;border:1px solid var(--border,#ddd)"></select>
+            </label>
+          </div>
+        </div>
+        <div id="billing-preview" style="margin-bottom:16px"></div>
+        <button class="btn btn-success" onclick="runBillingImport()">✅ ייבא עכשיו</button>
+      </div>
+      <div id="billing-import-result" style="margin-top:16px"></div>
+      <div id="billing-import-history" style="margin-top:24px"></div>
+    </div>`;
+  loadBillingImportHistory();
+}
+
+function onBillingFileChange(input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('billing-file-name').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    _billingRows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    if (!_billingRows.length) { showToast('הקובץ ריק','error'); return; }
+    _billingHeaders = Object.keys(_billingRows[0]);
+    const optsHtml = _billingHeaders.map(h => `<option value="${esc(h)}">${esc(h)}</option>`).join('');
+    document.getElementById('col-donation-num').innerHTML = optsHtml;
+    document.getElementById('col-payment-count').innerHTML = optsHtml;
+    // Auto-guess columns
+    const numGuess = _billingHeaders.find(h => /תרומה|donation|מספר|num|id/i.test(h)) || _billingHeaders[0];
+    document.getElementById('col-donation-num').value = numGuess;
+    showBillingPreview();
+    document.getElementById('billing-mapper').style.display = 'block';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function togglePaymentColMode() {
+  const mode = document.getElementById('col-mode')?.value;
+  const wrap = document.getElementById('col-payment-count-wrap');
+  if (wrap) wrap.style.display = mode === 'per-donation' ? 'flex' : 'none';
+  showBillingPreview();
+}
+
+function showBillingPreview() {
+  const previewEl = document.getElementById('billing-preview');
+  if (!previewEl || !_billingRows.length) return;
+  const donCol  = document.getElementById('col-donation-num')?.value;
+  const mode    = document.getElementById('col-mode')?.value;
+  const countCol = document.getElementById('col-payment-count')?.value;
+  const preview = _billingRows.slice(0, 8);
+  const colsToShow = _billingHeaders.slice(0, 6);
+  let headerCells = colsToShow.map(h => `<th${h===donCol?' style="background:var(--primary-light);color:#fff"':h===countCol&&mode==='per-donation'?' style="background:var(--accent-light)"':''}>${esc(h)}</th>`).join('');
+  let rows = preview.map(row =>
+    '<tr>' + colsToShow.map(h => `<td>${esc(String(row[h]||''))}</td>`).join('') + '</tr>'
+  ).join('');
+  previewEl.innerHTML = `
+    <p style="font-size:13px;color:var(--muted)">תצוגה מקדימה (${Math.min(8,_billingRows.length)} מתוך ${_billingRows.length} שורות):</p>
+    <div class="table-responsive" style="max-height:220px;overflow:auto">
+      <table class="data-table" style="font-size:12px"><thead><tr>${headerCells}</tr></thead><tbody>${rows}</tbody></table>
+    </div>`;
+}
+
+async function runBillingImport() {
+  const donCol   = document.getElementById('col-donation-num')?.value;
+  const mode     = document.getElementById('col-mode')?.value;
+  const countCol = document.getElementById('col-payment-count')?.value;
+  if (!donCol) { showToast('נא לבחור עמודת מספר תרומה','error'); return; }
+  if (mode === 'per-donation' && !countCol) { showToast('נא לבחור עמודת כמות תשלומים','error'); return; }
+
+  // Build map: donationNumber → paymentCount from billing file
+  const billingMap = {};
+  _billingRows.forEach(row => {
+    const num = String(row[donCol]||'').trim();
+    if (!num) return;
+    if (mode === 'per-payment') {
+      billingMap[num] = (billingMap[num] || 0) + 1;
+    } else {
+      const cnt = parseInt(row[countCol], 10);
+      if (!isNaN(cnt)) billingMap[num] = Math.max(billingMap[num]||0, cnt);
+    }
+  });
+
+  const resultEl = document.getElementById('billing-import-result');
+  resultEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">⏳ מעבד...</div>';
+
+  // Load all donations
+  const snap = await db.ref('donations').once('value');
+  const allDon = [];
+  snap.forEach(c => { const r = c.val(); r._id = c.key; allDon.push(r); });
+
+  // Build donationNumber → donation map (handle duplicates – keep latest)
+  const donByNum = {};
+  allDon.forEach(r => {
+    const num = String(r.donationNumber||'').trim();
+    if (num) donByNum[num] = r;
+  });
+
+  const today = currentMonth();
+  const updates = {};
+  let cntUpdated = 0, cntSkipped = 0, cntHistorical = 0, cntPending = 0, cntNotFound = 0;
+
+  Object.entries(billingMap).forEach(([num, billCount]) => {
+    const don = donByNum[num];
+    if (!don) { cntNotFound++; return; }
+    // single-payment and shimur: rewardMonth set at creation time, billing import skips them
+    if (don.paymentsCount <= 1 || don.donorType === 'shimur') return;
+
+    // GUARD: never overwrite locked or paid records
+    if (don.rewardMonthLocked || don.rewardPaid) { cntSkipped++; return; }
+
+    if (billCount < 2) {
+      // Not enough payments yet – clear/keep rewardMonth as null
+      if (don.rewardMonth) {
+        updates[don._id + '/rewardMonth'] = null;
+        updates[don._id + '/billingPaymentsReceived'] = billCount;
+        cntUpdated++;
+      }
+      return;
+    }
+
+    const base = { billingPaymentsReceived: billCount };
+    if (billCount > 2) {
+      // Historical: auto-set to donation.month+2 and lock
+      const histMonth = _addMonths(don.month || don.donationDate?.slice(0,7) || today, 2);
+      base.rewardMonth = histMonth;
+      base.rewardPaid = true;
+      base.rewardMonthLocked = true;
+      base.rewardPaidAt = Date.now();
+      base.rewardPaidBy = 'system-historical';
+      cntHistorical++;
+    } else {
+      // Exactly 2 payments – pending manual approval in current month
+      base.rewardMonth = today;
+      cntPending++;
+    }
+    Object.entries(base).forEach(([k,v]) => { updates[don._id + '/' + k] = v; });
+    cntUpdated++;
+  });
+
+  if (Object.keys(updates).length) {
+    await db.ref('donations').update(updates);
+  }
+
+  // Save import history
+  await db.ref('billingImports').push({
+    uploadedAt: Date.now(),
+    uploadedBy: currentUser.uid,
+    uploaderName: userProfile.displayName || currentUser.uid,
+    rowCount: _billingRows.length,
+    matchedCount: cntUpdated,
+    skippedCount: cntSkipped,
+    mode,
+    columnMapping: { donationNumberCol: donCol, paymentCountCol: countCol || null }
+  });
+
+  resultEl.innerHTML = `
+    <div style="background:#E8F5E9;border:1px solid #C8E6C9;border-radius:10px;padding:16px">
+      <h4 style="margin:0 0 8px;color:#2E7D32">✅ ייבוא הושלם</h4>
+      <ul style="margin:0;padding-right:16px;font-size:14px;line-height:1.8">
+        <li>שורות בקובץ: <strong>${_billingRows.length}</strong></li>
+        <li>תרומות עודכנו: <strong>${cntUpdated}</strong></li>
+        <li>היסטוריות (סומנו כשולם אוטומטית): <strong>${cntHistorical}</strong></li>
+        <li>ממתינות לאישור (2 תשלומים בדיוק): <strong>${cntPending}</strong></li>
+        <li>דולגו (כבר נעולות/שולמו): <strong>${cntSkipped}</strong></li>
+        <li>לא נמצאו במערכת: <strong>${cntNotFound}</strong></li>
+      </ul>
+      ${cntPending ? `<p style="margin:8px 0 0;color:#E65100;font-size:13px">⚠️ יש ${cntPending} תרומות הממתינות לאישורך בלשונית "אישור עמלות"</p>` : ''}
+    </div>`;
+  loadBillingImportHistory();
+}
+
+async function loadBillingImportHistory() {
+  const histEl = document.getElementById('billing-import-history');
+  if (!histEl) return;
+  const snap = await db.ref('billingImports').orderByChild('uploadedAt').limitToLast(10).once('value');
+  const items = [];
+  snap.forEach(c => { const v = c.val(); v._id = c.key; items.push(v); });
+  if (!items.length) { histEl.innerHTML = ''; return; }
+  items.reverse();
+  const rows = items.map(i => `<tr>
+    <td>${new Date(i.uploadedAt||0).toLocaleString('he-IL')}</td>
+    <td>${esc(i.uploaderName||i.uploadedBy||'')}</td>
+    <td>${i.rowCount||0}</td>
+    <td>${i.matchedCount||0}</td>
+    <td>${i.skippedCount||0}</td>
+  </tr>`).join('');
+  histEl.innerHTML = `
+    <h4>היסטוריית ייבואים</h4>
+    <div class="table-responsive">
+      <table class="data-table" style="font-size:13px">
+        <thead><tr><th>תאריך</th><th>מייבא</th><th>שורות</th><th>עודכנו</th><th>דולגו</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+// ---- TAB 3: COMMISSION APPROVAL ----
+async function renderCommissionApproval() {
+  const el = document.getElementById('ctab-content');
+  if (!el) return;
+  el.innerHTML = `<div class="comm-section"><div style="padding:20px;text-align:center;color:var(--muted)">⏳ טוען...</div></div>`;
+  await loadCommissionApproval();
+}
+
+async function loadCommissionApproval() {
+  const el = document.getElementById('ctab-content');
+  if (!el) return;
+
+  const snap = await db.ref('donations').once('value');
+  const all = [];
+  snap.forEach(c => { const r = c.val(); r._id = c.key; all.push(r); });
+
+  const pending = all.filter(r => r.rewardMonth && !r.rewardPaid && !r.rewardMonthLocked);
+  const paid    = all.filter(r => r.rewardPaid);
+
+  let pendingRows = '';
+  pending.sort((a,b) => (a.rewardMonth||'').localeCompare(b.rewardMonth||'')).forEach(r => {
+    const comm = _commAmt(r);
+    const typeLabel = r.donorType==='new' ? '<span class="donor-new">חדש</span>' : r.donorType==='shimur' ? '<span class="donor-shimur">שימור</span>' : '<span class="donor-returning">חוזר</span>';
+    pendingRows += `<tr>
+      <td>${r.donationDate||''}</td>
+      <td>${esc(r.donorName||'')}</td>
+      <td>${esc(r.operatorName||'')}</td>
+      <td>${typeLabel}</td>
+      <td>${fmtCurrency(r.totalAmount||0)}</td>
+      <td style="font-weight:600">${fmtCurrency(comm)}</td>
+      <td>
+        <span id="rmonth-display-${r._id}" style="font-size:13px">${r.rewardMonth||''}</span>
+        <button class="btn btn-ghost btn-sm" onclick="openEditRewardMonth('${r._id}','${r.rewardMonth||''}')" style="margin-right:4px;padding:2px 6px;font-size:11px">✏️</button>
+      </td>
+      <td><button class="btn btn-success btn-sm" onclick="approveReward('${r._id}')">✅ אשר</button></td>
+    </tr>`;
+  });
+
+  let paidRows = '';
+  paid.sort((a,b) => (b.rewardPaidAt||0)-(a.rewardPaidAt||0)).slice(0,50).forEach(r => {
+    const comm = _commAmt(r);
+    const typeLabel = r.donorType==='new' ? '<span class="donor-new">חדש</span>' : r.donorType==='shimur' ? '<span class="donor-shimur">שימור</span>' : '<span class="donor-returning">חוזר</span>';
+    const paidBy = r.rewardPaidBy === 'system-historical' ? 'אוטומטי (היסטורי)' : (r.rewardPaidBy ? 'מנהל' : '');
+    paidRows += `<tr>
+      <td>${r.donationDate||''}</td>
+      <td>${esc(r.donorName||'')}</td>
+      <td>${esc(r.operatorName||'')}</td>
+      <td>${typeLabel}</td>
+      <td>${fmtCurrency(r.totalAmount||0)}</td>
+      <td style="font-weight:600">${fmtCurrency(comm)}</td>
+      <td>${r.rewardMonth||''}</td>
+      <td><span class="reward-badge reward-paid">✅ שולם</span> <small style="color:var(--muted)">${paidBy}</small></td>
+    </tr>`;
+  });
+
+  el.innerHTML = `
+    <div class="comm-section">
+      <h3 style="margin-top:0;color:var(--warning)">⏳ ממתינות לאישור (${pending.length})</h3>
+      ${pending.length ? `
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead><tr><th>תאריך תרומה</th><th>תורם</th><th>טלפנית</th><th>סוג</th><th>סכום</th><th>עמלה</th><th>חודש עמלה</th><th>פעולה</th></tr></thead>
+          <tbody>${pendingRows}</tbody>
+        </table>
+      </div>` : `<p style="color:var(--muted)">אין עמלות הממתינות לאישור</p>`}
+
+      <h3 style="margin-top:28px;color:var(--success)">✅ שולם (${paid.length > 50 ? '50 אחרונות' : paid.length})</h3>
+      ${paid.length ? `
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead><tr><th>תאריך תרומה</th><th>תורם</th><th>טלפנית</th><th>סוג</th><th>סכום</th><th>עמלה</th><th>חודש עמלה</th><th>סטטוס</th></tr></thead>
+          <tbody>${paidRows}</tbody>
+        </table>
+      </div>` : `<p style="color:var(--muted)">אין עמלות ששולמו עדיין</p>`}
+    </div>`;
+}
+
+async function approveReward(donationId) {
+  if (!confirm('לאשר תשלום עמלה זו?')) return;
+  await db.ref('donations/' + donationId).update({
+    rewardPaid: true,
+    rewardPaidAt: Date.now(),
+    rewardPaidBy: currentUser.uid,
+    rewardMonthLocked: true
+  });
+  showToast('✅ עמלה אושרה ונעולה','success');
+  loadCommissionApproval();
+}
+
+function openEditRewardMonth(donationId, current) {
+  const newMonth = prompt('שנה חודש עמלה (פורמט YYYY-MM):', current || currentMonth());
+  if (!newMonth) return;
+  if (!/^\d{4}-\d{2}$/.test(newMonth)) { showToast('פורמט לא תקין. השתמש ב-YYYY-MM','error'); return; }
+  saveRewardMonth(donationId, newMonth);
+}
+
+async function saveRewardMonth(donationId, month) {
+  // Safety: never overwrite a locked record
+  const snap = await db.ref('donations/' + donationId).once('value');
+  const don = snap.val();
+  if (don?.rewardMonthLocked || don?.rewardPaid) {
+    showToast('לא ניתן לשנות – תרומה זו כבר נעולה/שולמה','error');
+    return;
+  }
+  await db.ref('donations/' + donationId + '/rewardMonth').set(month);
+  showToast('✅ חודש עמלה עודכן','success');
+  const display = document.getElementById('rmonth-display-' + donationId);
+  if (display) display.textContent = month;
 }
 
 // Close modals on backdrop click
