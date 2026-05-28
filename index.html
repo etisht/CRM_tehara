@@ -594,6 +594,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
 <script>
 // ===== FIREBASE CONFIG =====
@@ -1914,11 +1915,48 @@ async function deleteDonation(id) {
 }
 
 // ===== ADMIN REPORTS =====
+// ---- registry of active Chart.js instances so we can destroy on re-render ----
+const _repCharts = {};
+function _destroyChart(id) { if (_repCharts[id]) { _repCharts[id].destroy(); delete _repCharts[id]; } }
+function _mkChart(id, cfg) { _destroyChart(id); const c = document.getElementById(id); if (!c) return; _repCharts[id] = new Chart(c, cfg); }
+
+// ---- month range helpers ----
+function monthsBetween(from, to) {
+  const months = [];
+  let [fy, fm] = from.split('-').map(Number);
+  const [ty, tm] = to.split('-').map(Number);
+  while (fy < ty || (fy === ty && fm <= tm)) {
+    months.push(`${fy}-${String(fm).padStart(2,'0')}`);
+    fm++; if (fm > 12) { fm = 1; fy++; }
+  }
+  return months;
+}
+
 async function renderAdminReportsPage() {
+  await loadAllOperators();
+  const cur = currentMonth();
+  // default: last 4 months
+  const [cy, cm] = cur.split('-').map(Number);
+  let fm = cm - 3; let fy = cy;
+  if (fm <= 0) { fm += 12; fy--; }
+  const defaultFrom = `${fy}-${String(fm).padStart(2,'0')}`;
+
+  const opOptions = Object.entries(allOperators)
+    .filter(([,p]) => p.role === 'operator')
+    .map(([id,p]) => `<option value="${id}">${esc(p.displayName||id)}</option>`)
+    .join('');
+
   setPage('דוחות', `<button class="btn btn-success btn-sm" onclick="exportReportExcel()">📥 ייצוא Excel</button>`, `
-    <div class="filters-bar">
-      <span class="filter-label">חודש:</span>
-      <input type="month" class="filter-select" id="rep-month" value="${currentMonth()}" onchange="loadReports()">
+    <div class="filters-bar" style="flex-wrap:wrap;gap:12px;align-items:center;">
+      <span class="filter-label">מתחילת:</span>
+      <input type="month" class="filter-select" id="rep-from" value="${defaultFrom}" max="${cur}" onchange="loadReports()">
+      <span class="filter-label">עד:</span>
+      <input type="month" class="filter-select" id="rep-to" value="${cur}" max="${cur}" onchange="loadReports()">
+      <span class="filter-label">טלפנית:</span>
+      <select class="filter-select" id="rep-operator" onchange="loadReports()">
+        <option value="">כל הטלפניות</option>
+        ${opOptions}
+      </select>
     </div>
     <div id="reports-content"></div>
   `);
@@ -1926,111 +1964,273 @@ async function renderAdminReportsPage() {
 }
 
 async function loadReports() {
-  const month = document.getElementById('rep-month')?.value || currentMonth();
-  const snap = await db.ref('donations').orderByChild('month').equalTo(month).once('value');
-  const data = Object.values(snap.val()||{});
+  const fromMonth = document.getElementById('rep-from')?.value || currentMonth();
+  const toMonth   = document.getElementById('rep-to')?.value   || currentMonth();
+  const opFilter  = document.getElementById('rep-operator')?.value || '';
   const el = document.getElementById('reports-content');
   if (!el) return;
 
-  // By operator
-  const byOp = {};
-  data.forEach(r => {
-    if (!byOp[r.operatorId]) byOp[r.operatorId] = { name: r.operatorName, count: 0, total: 0 };
-    byOp[r.operatorId].count++;
-    byOp[r.operatorId].total += r.totalAmount||0;
-  });
-  const opEntries = Object.entries(byOp).sort((a,b)=>b[1].total-a[1].total);
-  const opRows = opEntries.map(([,v])=>`<tr><td>${esc(v.name)}</td><td>${v.count}</td><td style="font-weight:700">${fmtCurrency(v.total)}</td></tr>`).join('');
+  // guard: from <= to
+  if (fromMonth > toMonth) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>תאריך ההתחלה חייב להיות לפני תאריך הסיום</h3></div>`;
+    return;
+  }
 
-  // By campaign
-  const byCamp = {};
-  data.forEach(r => {
-    const key = r.campaignName||'—';
-    if (!byCamp[key]) byCamp[key] = { count: 0, total: 0 };
-    byCamp[key].count++; byCamp[key].total += r.totalAmount||0;
-  });
-  const campEntries = Object.entries(byCamp).sort((a,b)=>b[1].total-a[1].total);
-  const campRows = campEntries.map(([name,v])=>`<tr><td>${esc(name)}</td><td>${v.count}</td><td style="font-weight:700">${fmtCurrency(v.total)}</td></tr>`).join('');
+  el.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted)">טוען נתונים…</div>`;
 
-  const grandTotal = data.reduce((s,r)=>s+(r.totalAmount||0),0);
+  const months = monthsBetween(fromMonth, toMonth);
+
+  // fetch all data in parallel
+  const [donSnap, expSnap, attSnap] = await Promise.all([
+    db.ref('donations').once('value'),
+    db.ref('expenses').once('value').catch(() => ({ val: () => null })),
+    db.ref('attendance').once('value'),
+  ]);
+
+  let allDonations = Object.values(donSnap.val()||{}).filter(r => months.includes(r.month));
+  let allExpenses  = Object.values(expSnap.val()||{}).filter(r => months.includes(r.month));
+  let allAtt       = Object.values(attSnap.val()||{}).filter(r => months.includes(r.month) && r.clockOut);
+
+  if (opFilter) {
+    allDonations = allDonations.filter(r => r.operatorId === opFilter);
+    allAtt       = allAtt.filter(r => r.operatorId === opFilter);
+    // expenses are not per-operator, keep as-is unless single operator selected
+  }
+
+  // ---- aggregated KPIs ----
+  const totalIncome  = allDonations.reduce((s,r) => s+(r.totalAmount||0), 0);
+  const totalExp     = allExpenses.reduce((s,r) => s+(r.amount||0), 0);
+  const profitRatio  = totalExp > 0 ? (totalIncome / totalExp).toFixed(1) : '—';
+  const donCount     = allDonations.length;
+  const totalMins    = allAtt.reduce((s,r) => s+(r.durationMinutes||0), 0);
+  const totalHours   = (totalMins / 60).toFixed(1);
+  const avgDon       = donCount > 0 ? (totalIncome / donCount) : 0;
+  const avgPerHour   = totalMins > 0 ? (totalIncome / (totalMins/60)) : 0;
+  const activeOps    = new Set(allDonations.map(r=>r.operatorId)).size;
+
+  // ---- per-month breakdown ----
+  const byMonth = {};
+  months.forEach(m => { byMonth[m] = { income:0, expenses:0, count:0, mins:0, workers:new Set() }; });
+  allDonations.forEach(r => {
+    if (byMonth[r.month]) {
+      byMonth[r.month].income += r.totalAmount||0;
+      byMonth[r.month].count++;
+      byMonth[r.month].workers.add(r.operatorId);
+    }
+  });
+  allExpenses.forEach(r => { if (byMonth[r.month]) byMonth[r.month].expenses += r.amount||0; });
+  allAtt.forEach(r => { if (byMonth[r.month]) byMonth[r.month].mins += r.durationMinutes||0; });
+
+  // cumulative
+  let cumIncome = 0, cumExp = 0;
+  const cumIncomeArr = [], cumExpArr = [];
+  months.forEach(m => {
+    cumIncome += byMonth[m].income; cumExp += byMonth[m].expenses;
+    cumIncomeArr.push(cumIncome); cumExpArr.push(cumExp);
+  });
+
+  // ---- payment method breakdown per month ----
+  const METHODS = ['credit','transfer','check','cash'];
+  const METHOD_LABELS = { credit:'אשראי', transfer:'העברה', check:"צ'ק", cash:'מזומן' };
+  const METHOD_COLORS = { credit:'#6B4C8B', transfer:'#1976D2', check:'#C9A84C', cash:'#2E7D32' };
+  const methodByMonth = {};
+  months.forEach(m => { methodByMonth[m] = {credit:0,transfer:0,check:0,cash:0}; });
+  allDonations.forEach(r => {
+    if (methodByMonth[r.month]) {
+      const m = r.paymentMethod||'credit';
+      methodByMonth[r.month][m] = (methodByMonth[r.month][m]||0) + (r.totalAmount||0);
+    }
+  });
+  // overall pie
+  const methodTotals = {credit:0,transfer:0,check:0,cash:0};
+  allDonations.forEach(r => { const m=r.paymentMethod||'credit'; methodTotals[m]=(methodTotals[m]||0)+(r.totalAmount||0); });
+
+  // ---- new vs returning per month ----
+  const newByMonth = {}, retByMonth = {};
+  months.forEach(m => { newByMonth[m]=0; retByMonth[m]=0; });
+  allDonations.forEach(r => {
+    if (!newByMonth.hasOwnProperty(r.month)) return;
+    if (r.donorType === 'new') newByMonth[r.month] += r.totalAmount||0;
+    else retByMonth[r.month] += r.totalAmount||0;
+  });
+
+  // ---- monthly table rows ----
+  const tableRows = months.map(m => {
+    const d = byMonth[m];
+    const hrs = (d.mins/60).toFixed(1);
+    return `<tr>
+      <td style="font-weight:700">${monthLabel(m)}</td>
+      <td>${d.workers.size}</td>
+      <td>${hrs}</td>
+      <td>${d.count}</td>
+      <td style="font-weight:700;color:var(--success)">${fmtCurrency(d.income)}</td>
+      <td style="color:var(--danger)">${fmtCurrency(d.expenses)}</td>
+    </tr>`;
+  }).join('');
+
+  const periodLabel = fromMonth === toMonth ? monthLabel(fromMonth) : `${monthLabel(fromMonth)} – ${monthLabel(toMonth)}`;
 
   el.innerHTML = `
-    <div class="kpi-grid">
-      <div class="kpi-chip">
-        <div class="kpi-icon">💙</div><div class="kpi-num">${data.length}</div><div class="kpi-label">סה"כ תרומות</div>
+    <!-- Title -->
+    <div style="text-align:center;font-size:20px;font-weight:800;color:var(--primary-dark);margin:8px 0 20px;">
+      תכלול פעילות המוקד – ${periodLabel}
+    </div>
+
+    <!-- KPI grid -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:24px;">
+      ${kpiBox('💰','סה"כ הכנסות',fmtCurrency(totalIncome),'var(--success)')}
+      ${kpiBox('💸','סה"כ הוצאות',fmtCurrency(totalExp),'var(--danger)')}
+      ${kpiBox('📊','יחס רווחיות',profitRatio,'var(--primary)')}
+      ${kpiBox('💙','כמות תרומות',donCount,'var(--primary-dark)')}
+      ${kpiBox('⏱️','שעות עבודה',totalHours,'var(--accent)')}
+      ${kpiBox('📈','ממוצע תרומה',fmtCurrency(avgDon),'#1976D2')}
+      ${kpiBox('⚡','ממוצע לשעת עבודה',fmtCurrency(avgPerHour),'#C9A84C')}
+      ${kpiBox('👥','טלפניות פעילות',activeOps,'var(--success)')}
+    </div>
+
+    <!-- Row 1: income/expense bar + cumulative line -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+      <div class="card" style="padding:16px">
+        <div class="chart-title">📊 הוצאות / תרומות חודשי</div>
+        <div style="position:relative;height:220px"><canvas id="rch-monthly"></canvas></div>
       </div>
-      <div class="kpi-chip accent">
-        <div class="kpi-icon">💰</div><div class="kpi-num">${fmtCurrency(grandTotal)}</div><div class="kpi-label">סה"כ סכום</div>
-      </div>
-      <div class="kpi-chip success">
-        <div class="kpi-icon">👥</div><div class="kpi-num">${opEntries.length}</div><div class="kpi-label">טלפניות פעילות</div>
-      </div>
-      <div class="kpi-chip warning">
-        <div class="kpi-icon">📢</div><div class="kpi-num">${campEntries.length}</div><div class="kpi-label">קמפיינים</div>
+      <div class="card" style="padding:16px">
+        <div class="chart-title">📈 גרף מצטבר של תרומות והוצאות</div>
+        <div style="position:relative;height:220px"><canvas id="rch-cumulative"></canvas></div>
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;flex-wrap:wrap;">
-      <div class="card">
-        <div class="card-title">👥 סיכום לפי טלפנית</div>
-        <div class="table-wrap"><table class="data-table">
-          <thead><tr><th>שם</th><th>מספר תרומות</th><th>סה"כ</th></tr></thead>
-          <tbody>${opRows||'<tr><td colspan="3" style="text-align:center;color:var(--text-muted)">אין נתונים</td></tr>'}</tbody>
-        </table></div>
-        <canvas id="chart-operators" height="200" style="margin-top:16px"></canvas>
+
+    <!-- Row 2: stacked method + pie -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+      <div class="card" style="padding:16px">
+        <div class="chart-title">🔀 פילוח מקור התרומות – לפי חודש</div>
+        <div style="position:relative;height:220px"><canvas id="rch-method-bar"></canvas></div>
       </div>
-      <div class="card">
-        <div class="card-title">📢 סיכום לפי קמפיין</div>
-        <div class="table-wrap"><table class="data-table">
-          <thead><tr><th>קמפיין</th><th>מספר תרומות</th><th>סה"כ</th></tr></thead>
-          <tbody>${campRows||'<tr><td colspan="3" style="text-align:center;color:var(--text-muted)">אין נתונים</td></tr>'}</tbody>
-        </table></div>
-        <canvas id="chart-campaigns" height="200" style="margin-top:16px"></canvas>
+      <div class="card" style="padding:16px">
+        <div class="chart-title">🥧 פילוח מקור התרומות</div>
+        <div style="position:relative;height:220px"><canvas id="rch-method-pie"></canvas></div>
       </div>
+    </div>
+
+    <!-- Row 3: new vs returning -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+      <div class="card" style="padding:16px">
+        <div class="chart-title">🆕 תרומות חדשים vs. חוזרים – לפי חודש</div>
+        <div style="position:relative;height:220px"><canvas id="rch-newret"></canvas></div>
+      </div>
+      <div class="card" style="padding:16px">
+        <div class="chart-title">👥 סיכום לפי טלפנית</div>
+        <div style="position:relative;height:220px"><canvas id="rch-operators"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Monthly table -->
+    <div class="card" style="padding:16px;margin-bottom:20px;">
+      <div class="chart-title">📋 סיכום חודשי</div>
+      <div class="table-wrap"><table class="data-table">
+        <thead><tr>
+          <th>חודש</th><th>עובדים</th><th>שעות עבודה</th>
+          <th>כמות תרומות</th><th>סכום תרומות</th><th>הוצאות</th>
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
+        <tfoot><tr style="font-weight:800;background:#F8F4FF;">
+          <td>סה"כ</td><td>${activeOps}</td><td>${totalHours}</td>
+          <td>${donCount}</td>
+          <td style="color:var(--success)">${fmtCurrency(totalIncome)}</td>
+          <td style="color:var(--danger)">${fmtCurrency(totalExp)}</td>
+        </tr></tfoot>
+      </table></div>
     </div>
   `;
 
-  // Draw charts
-  if (opEntries.length) drawBarChart('chart-operators', opEntries.map(([,v])=>v.name), opEntries.map(([,v])=>v.total), '#6B4C8B');
-  if (campEntries.length) drawBarChart('chart-campaigns', campEntries.map(([k])=>k), campEntries.map(([,v])=>v.total), '#C9A84C');
+  // chart defaults
+  Chart.defaults.font.family = 'Heebo, sans-serif';
+  Chart.defaults.font.size   = 11;
+  const mlabels = months.map(m => monthLabel(m));
+
+  // 1. Monthly grouped bar
+  _mkChart('rch-monthly', { type:'bar', data:{
+    labels: mlabels,
+    datasets:[
+      { label:'הכנסות', data: months.map(m=>byMonth[m].income), backgroundColor:'rgba(107,76,139,0.75)', borderRadius:4 },
+      { label:'הוצאות', data: months.map(m=>byMonth[m].expenses), backgroundColor:'rgba(229,57,53,0.65)', borderRadius:4 },
+    ]
+  }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'top'} }, scales:{ y:{ ticks:{ callback:v=>fmtCurrency(v) } } } } });
+
+  // 2. Cumulative line
+  _mkChart('rch-cumulative', { type:'line', data:{
+    labels: mlabels,
+    datasets:[
+      { label:'הכנסות מצטבר', data:cumIncomeArr, borderColor:'#6B4C8B', backgroundColor:'rgba(107,76,139,0.1)', tension:0.3, fill:true },
+      { label:'הוצאות מצטבר', data:cumExpArr,   borderColor:'#E53935', backgroundColor:'rgba(229,57,53,0.07)',  tension:0.3, fill:true },
+    ]
+  }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'top'} }, scales:{ y:{ ticks:{ callback:v=>fmtCurrency(v) } } } } });
+
+  // 3. Stacked method bar
+  _mkChart('rch-method-bar', { type:'bar', data:{
+    labels: mlabels,
+    datasets: METHODS.map(method=>({
+      label: METHOD_LABELS[method],
+      data:  months.map(m => methodByMonth[m][method]||0),
+      backgroundColor: METHOD_COLORS[method]+'BB',
+      borderRadius: 3,
+    }))
+  }, options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y',
+    plugins:{ legend:{position:'top'} },
+    scales:{ x:{ stacked:true, ticks:{ callback:v=>fmtCurrency(v) } }, y:{ stacked:true } } } });
+
+  // 4. Method pie
+  const pieVals = METHODS.map(m=>methodTotals[m]||0);
+  if (pieVals.some(v=>v>0)) {
+    _mkChart('rch-method-pie', { type:'doughnut', data:{
+      labels: METHODS.map(m=>METHOD_LABELS[m]),
+      datasets:[{ data:pieVals, backgroundColor:METHODS.map(m=>METHOD_COLORS[m]+'CC'), borderWidth:2 }]
+    }, options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{position:'right'}, tooltip:{ callbacks:{ label:ctx => `${ctx.label}: ${fmtCurrency(ctx.raw)} (${totalIncome>0?((ctx.raw/totalIncome)*100).toFixed(1):0}%)` } } } } });
+  }
+
+  // 5. New vs returning
+  _mkChart('rch-newret', { type:'bar', data:{
+    labels: mlabels,
+    datasets:[
+      { label:'חדשים', data:months.map(m=>newByMonth[m]), backgroundColor:'rgba(25,118,210,0.75)', borderRadius:4 },
+      { label:'חוזרים', data:months.map(m=>retByMonth[m]), backgroundColor:'rgba(201,168,76,0.75)', borderRadius:4 },
+    ]
+  }, options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y',
+    plugins:{ legend:{position:'top'} },
+    scales:{ x:{ stacked:true, ticks:{ callback:v=>fmtCurrency(v) } }, y:{ stacked:true } } } });
+
+  // 6. By operator (horizontal bar)
+  const byOpArr = Object.entries(
+    allDonations.reduce((acc,r)=>{ acc[r.operatorId]=(acc[r.operatorId]||{name:r.operatorName,total:0}); acc[r.operatorId].total+=r.totalAmount||0; return acc; },{})
+  ).sort((a,b)=>b[1].total-a[1].total).slice(0,10);
+  if (byOpArr.length) {
+    _mkChart('rch-operators', { type:'bar', data:{
+      labels: byOpArr.map(([,v])=>v.name),
+      datasets:[{ label:'סה"כ תרומות', data:byOpArr.map(([,v])=>v.total), backgroundColor:'rgba(107,76,139,0.75)', borderRadius:4 }]
+    }, options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y',
+      plugins:{ legend:{display:false} },
+      scales:{ x:{ ticks:{ callback:v=>fmtCurrency(v) } } } } });
+  }
 }
 
-function drawBarChart(canvasId, labels, values, color) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
-  canvas.width = canvas.parentElement.clientWidth || 400;
-  canvas.height = 200;
-  const ctx = canvas.getContext('2d');
-  const max = Math.max(...values) || 1;
-  const n = labels.length;
-  const padL = 10, padR = 10, padT = 10, padB = 40;
-  const w = canvas.width - padL - padR;
-  const h = canvas.height - padT - padB;
-  const barW = Math.max(20, w/n - 8);
-
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  labels.forEach((lbl, i) => {
-    const x = padL + i*(w/n) + (w/n-barW)/2;
-    const barH = (values[i]/max)*h;
-    const y = padT + h - barH;
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.roundRect(x, y, barW, barH, 4);
-    ctx.fill();
-    // value
-    ctx.fillStyle = '#2C2035';
-    ctx.font = '11px Heebo';
-    ctx.textAlign = 'center';
-    ctx.fillText(fmtCurrency(values[i]), x+barW/2, y-4);
-    // label
-    ctx.fillStyle = '#6B5B7A';
-    ctx.fillText(lbl.length>8 ? lbl.slice(0,7)+'…' : lbl, x+barW/2, canvas.height-8);
-  });
+function kpiBox(icon, label, value, color) {
+  return `<div style="background:white;border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 12px;text-align:center;border-top:3px solid ${color};">
+    <div style="font-size:22px;margin-bottom:4px;">${icon}</div>
+    <div style="font-size:16px;font-weight:800;color:${color};">${value}</div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${label}</div>
+  </div>`;
 }
 
 async function exportReportExcel() {
-  const month = document.getElementById('rep-month')?.value || currentMonth();
-  const snap = await db.ref('donations').orderByChild('month').equalTo(month).once('value');
-  const data = Object.values(snap.val()||{});
+  const fromMonth = document.getElementById('rep-from')?.value || currentMonth();
+  const toMonth   = document.getElementById('rep-to')?.value   || currentMonth();
+  const opFilter  = document.getElementById('rep-operator')?.value || '';
+  const months    = monthsBetween(fromMonth, toMonth);
+
+  const snap = await db.ref('donations').once('value');
+  let data = Object.values(snap.val()||{}).filter(r => months.includes(r.month));
+  if (opFilter) data = data.filter(r => r.operatorId === opFilter);
 
   const byOp = {};
   data.forEach(r => {
@@ -2042,11 +2242,11 @@ async function exportReportExcel() {
   const sum = [['שם טלפנית','מספר תרומות','סה"כ (₪)']].concat(Object.values(byOp).map(v=>[v.name,v.count,v.total]));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sum), 'סיכום');
 
-  const detail = [['מס׳ תרומה','טלפנית','שם תורם','טלפון','תאריך','סוג','תשלומים','לתשלום','סה"כ','אופן','קמפיין','הערות']].concat(
-    data.map(r=>[r.donationNumber, r.operatorName, r.donorName, r.donorPhone, r.donationDate, r.donorType==='new'?'חדש':'חוזר', r.paymentsCount, r.amountPerPayment, r.totalAmount, methodLabel(r.paymentMethod), r.campaignName, r.notes])
+  const detail = [['מס׳ תרומה','חודש','טלפנית','שם תורם','טלפון','תאריך','סוג','תשלומים','לתשלום','סה"כ','אופן','קמפיין','הערות']].concat(
+    data.map(r=>[r.donationNumber, r.month, r.operatorName, r.donorName, r.donorPhone, r.donationDate, r.donorType==='new'?'חדש':'חוזר', r.paymentsCount, r.amountPerPayment, r.totalAmount, methodLabel(r.paymentMethod), r.campaignName, r.notes])
   );
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detail), 'פירוט תרומות');
-  XLSX.writeFile(wb, `דוח-תרומות-${month}.xlsx`);
+  XLSX.writeFile(wb, `דוח-${fromMonth}-${toMonth}.xlsx`);
   showToast('📥 הקובץ הורד','success');
 }
 

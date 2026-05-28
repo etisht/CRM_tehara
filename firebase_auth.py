@@ -23,11 +23,15 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 
+try:
+    import certifi
+    ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    ssl_ctx = ssl.create_default_context()
+
 # ── Firebase project config ──
 FIREBASE_API_KEY = "AIzaSyDLsND2pom04nRkK9wO5tCRp9GKWL78tYo"
 FIREBASE_URL     = "https://crm-tehara-default-rtdb.europe-west1.firebasedatabase.app"
-
-ssl_ctx = ssl.create_default_context()   # validates Firebase TLS certificate
 
 _CRED_FILE = Path(__file__).parent / ".firebase_credentials"
 
