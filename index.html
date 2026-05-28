@@ -403,6 +403,11 @@
   <div class="modal modal-wide">
     <div class="modal-title">💙 <span id="donation-modal-title">הוספת תרומה</span></div>
     <input type="hidden" id="donation-edit-id">
+    <input type="hidden" id="don-original-operator-id">
+    <div class="form-group" id="don-operator-row" style="display:none">
+      <label>טלפנית <span class="req">*</span></label>
+      <select class="form-control" id="don-operator"></select>
+    </div>
     <div class="form-group">
       <label>מספר תרומה <span class="req">*</span></label>
       <input class="form-control" type="text" id="don-number" placeholder="הזן מספר תרומה">
@@ -1825,8 +1830,17 @@ async function loadAdminDonations() {
 }
 
 // ===== DONATION FORM =====
+function _populateOperatorDropdown(selectedId) {
+  const sel = document.getElementById('don-operator');
+  sel.innerHTML = Object.entries(allOperators)
+    .filter(([,p]) => p.role === 'operator' && p.isActive !== false)
+    .map(([id,p]) => `<option value="${id}" ${id===selectedId?'selected':''}>${esc(p.displayName||id)}</option>`)
+    .join('');
+}
+
 function openAddDonation() {
   document.getElementById('donation-edit-id').value = '';
+  document.getElementById('don-original-operator-id').value = '';
   document.getElementById('donation-modal-title').textContent = 'הוספת תרומה';
   document.getElementById('don-number').value = '';
   document.getElementById('don-donor-name').value = '';
@@ -1839,6 +1853,10 @@ function openAddDonation() {
   document.getElementById('don-method').value = 'credit';
   document.getElementById('don-notes').value = '';
   populateCampaignDropdown('don-campaign');
+  const isAdmin = userProfile?.role === 'admin';
+  const opRow = document.getElementById('don-operator-row');
+  opRow.style.display = isAdmin ? '' : 'none';
+  if (isAdmin) _populateOperatorDropdown('');
   openModal('modal-donation');
 }
 
@@ -1847,6 +1865,7 @@ function openEditDonation(id) {
     const r = snap.val();
     if (!r) return;
     document.getElementById('donation-edit-id').value = id;
+    document.getElementById('don-original-operator-id').value = r.operatorId||'';
     document.getElementById('donation-modal-title').textContent = 'עריכת תרומה';
     document.getElementById('don-number').value = r.donationNumber||'';
     document.getElementById('don-donor-name').value = r.donorName||'';
@@ -1859,6 +1878,10 @@ function openEditDonation(id) {
     document.getElementById('don-method').value = r.paymentMethod||'credit';
     document.getElementById('don-notes').value = r.notes||'';
     populateCampaignDropdown('don-campaign', r.campaignId);
+    const isAdmin = userProfile?.role === 'admin';
+    const opRow = document.getElementById('don-operator-row');
+    opRow.style.display = isAdmin ? '' : 'none';
+    if (isAdmin) _populateOperatorDropdown(r.operatorId||'');
     openModal('modal-donation');
   });
 }
@@ -1896,10 +1919,27 @@ async function saveDonation() {
   const totalAmount = payments * amount;
   const month = date.slice(0,7);
 
+  // resolve operator: admin can pick; operator always self
+  let resolvedOpId, resolvedOpName;
+  if (userProfile.role === 'admin') {
+    if (editId) {
+      // editing: use selected operator from dropdown (admin may have changed it)
+      resolvedOpId   = document.getElementById('don-operator').value || document.getElementById('don-original-operator-id').value || currentUser.uid;
+    } else {
+      // new by admin: must pick an operator
+      resolvedOpId = document.getElementById('don-operator').value;
+      if (!resolvedOpId) { showToast('נא לבחור טלפנית','error'); return; }
+    }
+    resolvedOpName = allOperators[resolvedOpId]?.displayName || resolvedOpId;
+  } else {
+    resolvedOpId   = currentUser.uid;
+    resolvedOpName = userProfile.displayName;
+  }
+
   const record = {
     donationNumber,
-    operatorId: currentUser.uid,
-    operatorName: userProfile.displayName,
+    operatorId: resolvedOpId,
+    operatorName: resolvedOpName,
     donorName,
     donorPhone: document.getElementById('don-phone').value.trim(),
     donationDate: date,
