@@ -200,6 +200,7 @@
     .donation-number-badge { background: rgba(107,76,139,0.1); color: var(--primary-dark); padding: 3px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; font-family: monospace; }
     .donor-new { background: #E8F5E9; color: #2E7D32; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
     .donor-returning { background: #E3F2FD; color: #1565C0; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .donor-shimur { background: #FFF3E0; color: #E65100; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
     .method-badge { background: #F0F0F0; color: #555; padding: 3px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
 
     /* CHART */
@@ -432,6 +433,7 @@
         <select class="form-control" id="don-donor-type">
           <option value="new">תורם חדש</option>
           <option value="returning">תרומה חוזרת</option>
+          <option value="shimur">שימור</option>
         </select>
       </div>
     </div>
@@ -545,6 +547,10 @@
     <div class="form-group">
       <label>שם הקמפיין <span class="req">*</span></label>
       <input class="form-control" type="text" id="campaign-name" placeholder="שם הקמפיין">
+    </div>
+    <div class="form-group" style="display:flex;align-items:center;gap:8px">
+      <input type="checkbox" id="campaign-is-shimur" style="width:18px;height:18px;cursor:pointer">
+      <label for="campaign-is-shimur" style="margin:0;cursor:pointer;font-weight:600">קמפיין שימור (יסווג אוטומטית כ"שימור")</label>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modal-campaign')">ביטול</button>
@@ -1739,7 +1745,7 @@ function renderDonationsTable(containerId, data, isAdmin, month, total) {
     <td>${esc(r.donorName)}</td>
     <td dir="ltr">${esc(r.donorPhone||'—')}</td>
     <td>${fmtDateStr(r.donationDate)}</td>
-    <td><span class="${r.donorType==='new'?'donor-new':'donor-returning'}">${r.donorType==='new'?'חדש':'חוזר'}</span></td>
+    <td><span class="${r.donorType==='new'?'donor-new':r.donorType==='shimur'?'donor-shimur':'donor-returning'}">${r.donorType==='new'?'חדש':r.donorType==='shimur'?'שימור':'חוזר'}</span></td>
     <td>${r.paymentsCount} × ${fmtCurrency(r.amountPerPayment)}</td>
     <td style="font-weight:700;color:var(--primary-dark)">${fmtCurrency(r.totalAmount)}</td>
     <td><span class="method-badge">${methodLabel(r.paymentMethod)}</span></td>
@@ -1909,7 +1915,8 @@ async function saveDonation() {
   const amount = parseFloat(document.getElementById('don-amount').value)||0;
   const campaignId = document.getElementById('don-campaign').value;
   const method = document.getElementById('don-method').value;
-  const donorType = document.getElementById('don-donor-type').value;
+  // auto-classify: shimur campaign → shimur donor type
+  const donorType = allCampaigns[campaignId]?.isShimur ? 'shimur' : document.getElementById('don-donor-type').value;
 
   if (!donationNumber || !donorName || !date || !payments || !amount || !campaignId) {
     showToast('נא למלא את כל שדות החובה','error'); return;
@@ -2119,12 +2126,13 @@ async function loadReports() {
   const campNames = Object.entries(campTotals).sort((a,b)=>b[1]-a[1]).map(([k])=>k);
   const CAMP_PALETTE = ['#6B4C8B','#1976D2','#2E7D32','#C9A84C','#E53935','#00838F','#6D4C41','#546E7A','#AD1457','#558B2F'];
 
-  // ---- new vs returning per month ----
-  const newByMonth = {}, retByMonth = {};
-  months.forEach(m => { newByMonth[m]=0; retByMonth[m]=0; });
+  // ---- new vs returning vs shimur per month ----
+  const newByMonth = {}, retByMonth = {}, shimurByMonth = {};
+  months.forEach(m => { newByMonth[m]=0; retByMonth[m]=0; shimurByMonth[m]=0; });
   allDonations.forEach(r => {
     if (!newByMonth.hasOwnProperty(r.month)) return;
     if (r.donorType === 'new') newByMonth[r.month] += r.totalAmount||0;
+    else if (r.donorType === 'shimur') shimurByMonth[r.month] += r.totalAmount||0;
     else retByMonth[r.month] += r.totalAmount||0;
   });
 
@@ -2186,10 +2194,10 @@ async function loadReports() {
       </div>
     </div>
 
-    <!-- Row 3: new vs returning -->
+    <!-- Row 3: new vs returning vs shimur -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
       <div class="card" style="padding:16px">
-        <div class="chart-title">🆕 תרומות חדשים vs. חוזרים – לפי חודש</div>
+        <div class="chart-title">🆕 חדשים / חוזרים / שימור – לפי חודש</div>
         <div style="position:relative;height:220px"><canvas id="rch-newret"></canvas></div>
       </div>
       <div class="card" style="padding:16px">
@@ -2275,12 +2283,13 @@ async function loadReports() {
       plugins:{ legend:{position:'right'}, tooltip:{ callbacks:{ label:ctx => `${ctx.label}: ${fmtCurrency(ctx.raw)} (${totalIncome>0?((ctx.raw/totalIncome)*100).toFixed(1):0}%)` } } } } });
   }
 
-  // 5. New vs returning
+  // 5. New vs returning vs shimur
   _mkChart('rch-newret', { type:'bar', data:{
     labels: mlabels,
     datasets:[
       { label:'חדשים', data:months.map(m=>newByMonth[m]), backgroundColor:'rgba(25,118,210,0.75)', borderRadius:4 },
       { label:'חוזרים', data:months.map(m=>retByMonth[m]), backgroundColor:'rgba(201,168,76,0.75)', borderRadius:4 },
+      { label:'שימור', data:months.map(m=>shimurByMonth[m]), backgroundColor:'rgba(230,81,0,0.75)', borderRadius:4 },
     ]
   }, options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y',
     plugins:{ legend:{position:'top'} },
@@ -2353,7 +2362,7 @@ async function exportReportExcel() {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sum), 'סיכום');
 
   const detail = [['מס׳ תרומה','חודש','טלפנית','שם תורם','טלפון','תאריך','סוג','תשלומים','לתשלום','סה"כ','אופן','קמפיין','הערות']].concat(
-    data.map(r=>[r.donationNumber, r.month, r.operatorName, r.donorName, r.donorPhone, r.donationDate, r.donorType==='new'?'חדש':'חוזר', r.paymentsCount, r.amountPerPayment, r.totalAmount, methodLabel(r.paymentMethod), r.campaignName, r.notes])
+    data.map(r=>[r.donationNumber, r.month, r.operatorName, r.donorName, r.donorPhone, r.donationDate, r.donorType==='new'?'חדש':r.donorType==='shimur'?'שימור':'חוזר', r.paymentsCount, r.amountPerPayment, r.totalAmount, methodLabel(r.paymentMethod), r.campaignName, r.notes])
   );
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detail), 'פירוט תרומות');
   XLSX.writeFile(wb, `דוח-${fromMonth}-${toMonth}.xlsx`);
@@ -2795,7 +2804,7 @@ async function deleteUser(uid) {
 async function renderAdminSettingsPage() {
   await loadSettings();
   const campRows = Object.entries(allCampaigns).map(([id,c])=>`<tr>
-    <td>${esc(c.name)}</td>
+    <td>${esc(c.name)}${c.isShimur?` <span class="donor-shimur">שימור</span>`:''}</td>
     <td><span class="tag ${c.isActive!==false?'tag-success':'tag-danger'}">${c.isActive!==false?'פעיל':'לא פעיל'}</span></td>
     <td>
       <button class="btn btn-ghost btn-sm" onclick="openEditCampaign('${id}','${esc(c.name)}')">✏️ עריכה</button>
@@ -2821,6 +2830,7 @@ async function renderAdminSettingsPage() {
       <div class="table-wrap"><table class="data-table">
         <thead><tr><th>שם הקמפיין</th><th>סטטוס</th><th>פעולות</th></tr></thead>
         <tbody>${campRows||'<tr><td colspan="3" style="text-align:center;color:var(--text-muted)">אין קמפיינים</td></tr>'}</tbody>
+        <tfoot><tr><td colspan="3"><button class="btn btn-ghost btn-sm" onclick="bulkReclassifyShimur()">🔄 עדכן סיווג שימור לכל התרומות</button></td></tr></tfoot>
       </table></div>
     </div>
     <div class="card">
@@ -2839,23 +2849,27 @@ async function renderAdminSettingsPage() {
 function openAddCampaign() {
   document.getElementById('campaign-edit-id').value='';
   document.getElementById('campaign-name').value='';
+  document.getElementById('campaign-is-shimur').checked=false;
   openModal('modal-campaign');
 }
 function openEditCampaign(id, name) {
   document.getElementById('campaign-edit-id').value=id;
   document.getElementById('campaign-name').value=name;
+  document.getElementById('campaign-is-shimur').checked=!!(allCampaigns[id]?.isShimur);
   openModal('modal-campaign');
 }
 async function saveCampaign() {
   const id = document.getElementById('campaign-edit-id').value;
   const name = document.getElementById('campaign-name').value.trim();
+  const isShimur = document.getElementById('campaign-is-shimur').checked;
   if (!name) { showToast('נא להזין שם קמפיין','error'); return; }
   if (id) {
-    await db.ref('settings/campaigns/'+id+'/name').set(name);
+    await db.ref('settings/campaigns/'+id).update({ name, isShimur });
     allCampaigns[id].name = name;
+    allCampaigns[id].isShimur = isShimur;
   } else {
-    const ref = await db.ref('settings/campaigns').push({ name, isActive: true });
-    allCampaigns[ref.key] = { name, isActive: true };
+    const ref = await db.ref('settings/campaigns').push({ name, isActive: true, isShimur });
+    allCampaigns[ref.key] = { name, isActive: true, isShimur };
   }
   closeModal('modal-campaign');
   showToast('✅ קמפיין נשמר','success');
@@ -2875,6 +2889,24 @@ async function deleteCampaign(id) {
   }
   showToast('בוצע','success');
   renderAdminSettingsPage();
+}
+
+async function bulkReclassifyShimur() {
+  const shimurIds = new Set(Object.entries(allCampaigns).filter(([,c])=>c.isShimur).map(([id])=>id));
+  if (!shimurIds.size) { showToast('אין קמפיינים מסומנים כשימור','error'); return; }
+  if (!confirm(`יעודכנו כל התרומות של ${shimurIds.size} קמפיין/י שימור לסוג "שימור". להמשיך?`)) return;
+  const snap = await db.ref('donations').once('value');
+  const updates = {};
+  snap.forEach(child => {
+    const r = child.val();
+    if (shimurIds.has(r.campaignId) && r.donorType !== 'shimur') {
+      updates[child.key+'/donorType'] = 'shimur';
+    }
+  });
+  const count = Object.keys(updates).length;
+  if (!count) { showToast('כל התרומות כבר מסווגות נכון','success'); return; }
+  await db.ref('donations').update(updates);
+  showToast(`✅ עודכנו ${count} תרומות לסוג שימור`,'success');
 }
 
 function openAddExpenseType() {
